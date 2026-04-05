@@ -1,0 +1,28 @@
+{
+  "name": "architecture-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.17.0",
+  "scripts": {
+    "dev": "rsbuild dev",
+    "build": "rsbuild build",
+    "preview": "rsbuild preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ant-design/icons-vue": "^7.0.1",
+    "ant-design-vue": "^4.2.6",
+    "mxgraph": "^4.2.2",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@rsbuild/core": "^1.3.9",
+    "@rsbuild/plugin-vue": "^1.0.7",
+    "@vitejs/plugin-vue": "^6.0.5",
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^20.8.9",
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4"
+  }
+}

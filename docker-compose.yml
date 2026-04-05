@@ -1,0 +1,13 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flow-project-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-chi_sim+eng}
+    restart: unless-stopped

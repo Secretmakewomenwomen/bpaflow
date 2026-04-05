@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1180" viewBox="0 0 1800 1180">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#4b5563" />
+    </marker>
+    <style>
+      .title { font: 700 28px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 14px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #475569; }
+      .box { fill: #f8fafc; stroke: #334155; stroke-width: 1.6; rx: 8; ry: 8; }
+      .box-blue { fill: #eff6ff; stroke: #1d4ed8; stroke-width: 1.8; rx: 8; ry: 8; }
+      .box-green { fill: #ecfdf5; stroke: #047857; stroke-width: 1.8; rx: 8; ry: 8; }
+      .box-amber { fill: #fffbeb; stroke: #b45309; stroke-width: 1.8; rx: 8; ry: 8; }
+      .box-red { fill: #fef2f2; stroke: #b91c1c; stroke-width: 1.8; rx: 8; ry: 8; }
+      .label { font: 600 16px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #111827; }
+      .desc { font: 500 13px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #334155; }
+      .line { stroke: #4b5563; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .line-dashed { stroke: #64748b; stroke-width: 1.8; fill: none; stroke-dasharray: 6 5; marker-end: url(#arrow); }
+      .tag { font: 600 12px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1f2937; }
+    </style>
+  </defs>
+
+  <text x="40" y="50" class="title">VectorizationService 整体工作流（教学版）</text>
+  <text x="40" y="78" class="subtitle">
+    文件入口 -> 状态流转 -> 文本通道（解析/清洗/切块/embedding）-> PNG 图片通道 -> Milvus 入库 -> 聚合状态/异常回写
+  </text>
+
+  <rect x="60" y="120" width="360" height="90" class="box-blue" />
+  <text x="80" y="156" class="label">1) vectorize_uploaded_file(...) 入口</text>
+  <text x="80" y="181" class="desc">加载 UploadedFile 记录，写入 PROCESSING 状态并 commit</text>
+
+  <rect x="500" y="120" width="360" height="90" class="box-blue" />
+  <text x="520" y="156" class="label">2) vectorize_record(record, content)</text>
+  <text x="520" y="181" class="desc">编排文本主通道，PNG 额外走图片通道</text>
+
+  <rect x="940" y="120" width="360" height="90" class="box-green" />
+  <text x="960" y="156" class="label">3) 文本通道 _vectorize_text_channel</text>
+  <text x="960" y="181" class="desc">解析 -> 清洗 -> 切块 -> 文本向量 -> 写 Milvus 文本集合</text>
+
+  <rect x="1380" y="120" width="360" height="90" class="box-amber" />
+  <text x="1400" y="156" class="label">4) PNG 图片通道 _vectorize_image_channel</text>
+  <text x="1400" y="181" class="desc">build_data_url -> 图片向量 -> 写 Milvus 图片集合</text>
+
+  <path d="M420,165 L500,165" class="line" />
+  <path d="M860,165 L940,165" class="line" />
+  <path d="M1300,165 L1380,165" class="line-dashed" />
+  <text x="1320" y="145" class="tag">仅 png</text>
+
+  <rect x="100" y="300" width="280" height="84" class="box" />
+  <text x="120" y="332" class="label">ParsingService.parse</text>
+  <text x="120" y="355" class="desc">docx / pdf / png -> ParsedSegment[]</text>
+
+  <rect x="430" y="300" width="280" height="84" class="box" />
+  <text x="450" y="332" class="label">TextCleaningService.clean_segments</text>
+  <text x="450" y="355" class="desc">标准化文本，移除重复页眉页脚</text>
+
+  <rect x="760" y="300" width="280" height="84" class="box" />
+  <text x="780" y="332" class="label">ChunkingService.build_chunks</text>
+  <text x="780" y="355" class="desc">小块检索 + 大块回填（large_chunk）</text>
+
+  <rect x="1090" y="300" width="280" height="84" class="box" />
+  <text x="1110" y="332" class="label">EmbeddingService.embed_texts</text>
+  <text x="1110" y="355" class="desc">文本 embedding + 归一化 + 维度对齐</text>
+
+  <rect x="1420" y="300" width="280" height="84" class="box" />
+  <text x="1440" y="332" class="label">MilvusService.replace_text_chunks</text>
+  <text x="1440" y="355" class="desc">ensure_text_collection + replace rows</text>
+
+  <path d="M380,342 L430,342" class="line" />
+  <path d="M710,342 L760,342" class="line" />
+  <path d="M1040,342 L1090,342" class="line" />
+  <path d="M1370,342 L1420,342" class="line" />
+
+  <rect x="1080" y="470" width="300" height="84" class="box-amber" />
+  <text x="1100" y="502" class="label">_build_data_url(mime, content)</text>
+  <text x="1100" y="525" class="desc">二进制图片 -> data:image/...;base64</text>
+
+  <rect x="1420" y="470" width="280" height="84" class="box-amber" />
+  <text x="1440" y="502" class="label">ImageEmbeddingService.embed_image</text>
+  <text x="1440" y="525" class="desc">图文输入 -> 图片向量（归一化）</text>
+
+  <rect x="1420" y="620" width="280" height="84" class="box-amber" />
+  <text x="1440" y="652" class="label">MilvusService.replace_image_vectors</text>
+  <text x="1440" y="675" class="desc">ensure_image_collection + replace rows</text>
+
+  <path d="M1530,210 L1530,300" class="line-dashed" />
+  <path d="M1230,384 L1230,470" class="line-dashed" />
+  <path d="M1380,512 L1420,512" class="line-dashed" />
+  <path d="M1560,554 L1560,620" class="line-dashed" />
+
+  <rect x="500" y="790" width="420" height="96" class="box-green" />
+  <text x="520" y="825" class="label">5) 成功收口（vectorize_uploaded_file 内）</text>
+  <text x="520" y="849" class="desc">
+    更新 chunk_count / text_chunk_count / image_chunk_count，调用 calculate_aggregate_vector_status
+  </text>
+  <text x="520" y="870" class="desc">若总状态为 VECTORIZED，则写入 vectorized_at 并 commit</text>
+
+  <rect x="980" y="790" width="420" height="96" class="box-red" />
+  <text x="1000" y="825" class="label">6) 异常收口（except 分支）</text>
+  <text x="1000" y="849" class="desc">_truncate_error 截断错误 -> 更新 FAILED 子状态</text>
+  <text x="1000" y="870" class="desc">再次聚合总状态并 commit，最后 finally 关闭 DB 会话</text>
+
+  <path d="M860,210 L860,790" class="line" />
+  <path d="M1600,704 L1600,790" class="line-dashed" />
+  <path d="M920,840 L980,840" class="line" />
+
+  <rect x="120" y="980" width="640" height="120" class="box" />
+  <text x="140" y="1018" class="label">补充：删除流程</text>
+  <text x="140" y="1043" class="desc">VectorizationService.delete_file_vectors(uploaded_file_id)</text>
+  <text x="140" y="1067" class="desc">-> MilvusService.delete_file_vectors(file_id)</text>
+  <text x="140" y="1091" class="desc">-> 分别删除文本集合和图片集合中的 file_id 相关向量</text>
+
+  <rect x="820" y="980" width="920" height="120" class="box" />
+  <text x="840" y="1018" class="label">关键状态字</text>
+  <text x="840" y="1043" class="desc">PENDING: 未开始 | PROCESSING: 处理中 | VECTORIZED: 完成 | FAILED: 失败</text>
+  <text x="840" y="1067" class="desc">非 PNG：单通道聚合（文本） | PNG：双通道聚合（文本 + 图片）</text>
+  <text x="840" y="1091" class="desc">向量入库策略：replace（先 delete file_id，再 insert 新 rows）</text>
+</svg>

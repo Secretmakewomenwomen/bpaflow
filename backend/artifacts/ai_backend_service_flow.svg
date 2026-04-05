@@ -1,0 +1,329 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2300" height="1640" viewBox="0 0 2300 1640" role="img" aria-labelledby="title desc">
+  <title id="title">AI Backend Service Flow</title>
+  <desc id="desc">后端 AI 服务泳道流程图，覆盖会话、同步问答、SSE、RAG、上传与向量化、存储。</desc>
+  <defs>
+    <style>
+      .bg { fill: #f6f8fb; }
+      .lane { fill: #ffffff; stroke: #d7deea; stroke-width: 1.2; }
+      .laneTitle { font: 700 22px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #0f172a; }
+      .sectionTitle { font: 700 24px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #0f172a; }
+      .sectionNote { font: 400 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #475569; }
+      .node { stroke: #2f3f5b; stroke-width: 1.5; rx: 18; ry: 18; }
+      .nodeBlue { fill: #e8f1ff; }
+      .nodeGreen { fill: #eaf8ef; }
+      .nodePurple { fill: #f3ecff; }
+      .nodeAmber { fill: #fff4df; }
+      .nodeSlate { fill: #edf2f7; }
+      .nodeRose { fill: #ffecee; }
+      .nodeTitle { font: 700 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #0f172a; }
+      .nodeText { font: 400 13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #334155; }
+      .small { font: 400 12px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #475569; }
+      .store { fill: #0f172a; stroke: #0f172a; stroke-width: 1.5; rx: 16; ry: 16; }
+      .storeText { font: 700 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #f8fafc; }
+      .line { stroke: #475569; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .lineDashed { stroke: #64748b; stroke-width: 2; fill: none; stroke-dasharray: 7 6; marker-end: url(#arrow); }
+      .branch { font: 700 12px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #7c3aed; }
+      .divider { stroke: #cfd8e3; stroke-width: 1; stroke-dasharray: 5 5; }
+      .callout { fill: #ffffff; stroke: #c9d5e6; stroke-width: 1.2; rx: 16; ry: 16; }
+      .calloutTitle { font: 700 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #0f172a; }
+      .calloutText { font: 400 13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #334155; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="2300" height="1640"/>
+
+  <text x="70" y="54" class="sectionTitle">后端 AI 服务流程图</text>
+  <text x="70" y="82" class="sectionNote">范围：会话管理、同步问答、SSE 流式问答、RAG 检索、上传与向量化、PostgreSQL / pgvector / OSS / LangGraph checkpoint</text>
+
+  <!-- Lanes -->
+  <rect class="lane" x="50" y="110" width="300" height="1470"/>
+  <rect class="lane" x="350" y="110" width="300" height="1470"/>
+  <rect class="lane" x="650" y="110" width="300" height="1470"/>
+  <rect class="lane" x="950" y="110" width="300" height="1470"/>
+  <rect class="lane" x="1250" y="110" width="300" height="1470"/>
+  <rect class="lane" x="1550" y="110" width="300" height="1470"/>
+  <rect class="lane" x="1850" y="110" width="400" height="1470"/>
+
+  <text x="200" y="145" text-anchor="middle" class="laneTitle">前端</text>
+  <text x="500" y="145" text-anchor="middle" class="laneTitle">API 路由层</text>
+  <text x="800" y="145" text-anchor="middle" class="laneTitle">会话服务</text>
+  <text x="1100" y="145" text-anchor="middle" class="laneTitle">LangGraph / AI 编排</text>
+  <text x="1400" y="145" text-anchor="middle" class="laneTitle">RAG / 向量检索</text>
+  <text x="1700" y="145" text-anchor="middle" class="laneTitle">上传 / 向量化</text>
+  <text x="2050" y="145" text-anchor="middle" class="laneTitle">存储层</text>
+
+  <line class="divider" x1="60" y1="210" x2="2240" y2="210"/>
+  <text x="70" y="198" class="small">A. 启动初始化</text>
+
+  <line class="divider" x1="60" y1="480" x2="2240" y2="480"/>
+  <text x="70" y="468" class="small">B. 会话与同步问答主链路</text>
+
+  <line class="divider" x1="60" y1="930" x2="2240" y2="930"/>
+  <text x="70" y="918" class="small">C. SSE 流式问答</text>
+
+  <line class="divider" x1="60" y1="1240" x2="2240" y2="1240"/>
+  <text x="70" y="1228" class="small">D. 文件上传与向量化供给 RAG</text>
+
+  <!-- Startup -->
+  <rect class="node nodeSlate" x="970" y="235" width="260" height="76"/>
+  <text x="1100" y="263" text-anchor="middle" class="nodeTitle">FastAPI startup</text>
+  <text x="1100" y="286" text-anchor="middle" class="nodeText">建表 / 确保 pgvector / 初始化 AI 依赖</text>
+
+  <rect class="node nodePurple" x="970" y="340" width="260" height="82"/>
+  <text x="1100" y="368" text-anchor="middle" class="nodeTitle">initialize_postgres_checkpointer</text>
+  <text x="1100" y="391" text-anchor="middle" class="nodeText">PostgresSaver.from_conn_string</text>
+  <text x="1100" y="409" text-anchor="middle" class="small">setup() 仅在启动阶段执行</text>
+
+  <rect class="store" x="1940" y="340" width="220" height="82"/>
+  <text x="2050" y="370" text-anchor="middle" class="storeText">LangGraph Checkpoint</text>
+  <text x="2050" y="392" text-anchor="middle" class="storeText">PostgreSQL</text>
+  <text x="2050" y="410" text-anchor="middle" class="small" fill="#cbd5e1">thread_id = conversation_id</text>
+
+  <path class="line" d="M1100 311 L1100 340"/>
+  <path class="line" d="M1230 381 L1940 381"/>
+
+  <!-- Create conversation -->
+  <rect class="node nodeBlue" x="90" y="540" width="220" height="78"/>
+  <text x="200" y="570" text-anchor="middle" class="nodeTitle">打开 AI 面板 / 创建会话</text>
+  <text x="200" y="593" text-anchor="middle" class="nodeText">前端先请求 conversation_id</text>
+
+  <rect class="node nodeBlue" x="390" y="540" width="220" height="78"/>
+  <text x="500" y="570" text-anchor="middle" class="nodeTitle">POST /api/ai/conversations</text>
+  <text x="500" y="593" text-anchor="middle" class="nodeText">鉴权 + 注入 service</text>
+
+  <rect class="node nodeGreen" x="690" y="540" width="220" height="78"/>
+  <text x="800" y="570" text-anchor="middle" class="nodeTitle">create_conversation</text>
+  <text x="800" y="593" text-anchor="middle" class="nodeText">写 ai_conversation</text>
+
+  <rect class="store" x="1940" y="540" width="220" height="78"/>
+  <text x="2050" y="570" text-anchor="middle" class="storeText">ai_conversation</text>
+  <text x="2050" y="594" text-anchor="middle" class="small" fill="#cbd5e1">会话主表</text>
+
+  <path class="line" d="M310 579 L390 579"/>
+  <path class="line" d="M610 579 L690 579"/>
+  <path class="line" d="M910 579 L1940 579"/>
+
+  <!-- Sync route -->
+  <rect class="node nodeBlue" x="90" y="670" width="220" height="84"/>
+  <text x="200" y="700" text-anchor="middle" class="nodeTitle">发送消息</text>
+  <text x="200" y="723" text-anchor="middle" class="nodeText">普通请求</text>
+  <text x="200" y="741" text-anchor="middle" class="small">POST /messages</text>
+
+  <rect class="node nodeBlue" x="390" y="670" width="220" height="84"/>
+  <text x="500" y="698" text-anchor="middle" class="nodeTitle">send_ai_conversation_message</text>
+  <text x="500" y="721" text-anchor="middle" class="nodeText">先持久化 user_message</text>
+  <text x="500" y="739" text-anchor="middle" class="small">再调用 assistant.invoke()</text>
+
+  <rect class="node nodeGreen" x="690" y="670" width="220" height="84"/>
+  <text x="800" y="698" text-anchor="middle" class="nodeTitle">create_user_message</text>
+  <text x="800" y="721" text-anchor="middle" class="nodeText">写 ai_message</text>
+  <text x="800" y="739" text-anchor="middle" class="small">role = user</text>
+
+  <rect class="store" x="1940" y="670" width="220" height="84"/>
+  <text x="2050" y="699" text-anchor="middle" class="storeText">ai_message</text>
+  <text x="2050" y="721" text-anchor="middle" class="storeText">user message</text>
+  <text x="2050" y="739" text-anchor="middle" class="small" fill="#cbd5e1">会话历史正文</text>
+
+  <path class="line" d="M310 712 L390 712"/>
+  <path class="line" d="M610 712 L690 712"/>
+  <path class="line" d="M910 712 L1940 712"/>
+
+  <!-- LangGraph sync main -->
+  <rect class="node nodePurple" x="970" y="520" width="260" height="76"/>
+  <text x="1100" y="548" text-anchor="middle" class="nodeTitle">build_graph + compile</text>
+  <text x="1100" y="571" text-anchor="middle" class="nodeText">graph.invoke(config.thread_id)</text>
+
+  <rect class="node nodePurple" x="970" y="630" width="260" height="78"/>
+  <text x="1100" y="658" text-anchor="middle" class="nodeTitle">load_history</text>
+  <text x="1100" y="681" text-anchor="middle" class="nodeText">读最近消息作为上下文</text>
+
+  <rect class="node nodeGreen" x="690" y="800" width="220" height="84"/>
+  <text x="800" y="828" text-anchor="middle" class="nodeTitle">get_recent_messages</text>
+  <text x="800" y="851" text-anchor="middle" class="nodeText">limit = assistant_max_context_blocks</text>
+
+  <rect class="node nodePurple" x="970" y="740" width="260" height="76"/>
+  <text x="1100" y="768" text-anchor="middle" class="nodeTitle">classify_intent</text>
+  <text x="1100" y="791" text-anchor="middle" class="nodeText">规则识别 general_chat / rag / xml</text>
+
+  <rect class="node nodePurple" x="970" y="850" width="260" height="84"/>
+  <text x="1100" y="878" text-anchor="middle" class="nodeTitle">build_response</text>
+  <text x="1100" y="901" text-anchor="middle" class="nodeText">统一组装 AssistantResponse</text>
+  <text x="1100" y="919" text-anchor="middle" class="small">message / answer / snippets / files</text>
+
+  <rect class="node nodePurple" x="970" y="960" width="260" height="84"/>
+  <text x="1100" y="988" text-anchor="middle" class="nodeTitle">persist_message</text>
+  <text x="1100" y="1011" text-anchor="middle" class="nodeText">create_assistant_message</text>
+  <text x="1100" y="1029" text-anchor="middle" class="small">写 assistant 消息与引用</text>
+
+  <rect class="node nodeGreen" x="690" y="960" width="220" height="84"/>
+  <text x="800" y="988" text-anchor="middle" class="nodeTitle">create_assistant_message</text>
+  <text x="800" y="1011" text-anchor="middle" class="nodeText">写 ai_message + ai_message_reference</text>
+
+  <rect class="store" x="1940" y="960" width="220" height="84"/>
+  <text x="2050" y="988" text-anchor="middle" class="storeText">ai_message</text>
+  <text x="2050" y="1011" text-anchor="middle" class="storeText">ai_message_reference</text>
+  <text x="2050" y="1029" text-anchor="middle" class="small" fill="#cbd5e1">assistant 输出与引用落库</text>
+
+  <path class="line" d="M610 712 L970 712"/>
+  <path class="line" d="M1100 596 L1100 630"/>
+  <path class="line" d="M970 669 L910 669 L910 842"/>
+  <path class="line" d="M800 800 L800 754 L970 754"/>
+  <path class="line" d="M1100 708 L1100 740"/>
+  <path class="line" d="M1100 934 L1100 960"/>
+  <path class="line" d="M970 1002 L910 1002"/>
+  <path class="line" d="M910 1002 L1940 1002"/>
+
+  <!-- Intent branches -->
+  <text x="1248" y="770" class="branch">intent 分流</text>
+
+  <rect class="node nodeRose" x="1275" y="710" width="250" height="88"/>
+  <text x="1400" y="738" text-anchor="middle" class="nodeTitle">generate_flow_from_file</text>
+  <text x="1400" y="761" text-anchor="middle" class="nodeText">命中文件生成流程图时进入人工确认</text>
+  <text x="1400" y="779" text-anchor="middle" class="small">返回 waiting_input + pending_action(select_file)</text>
+
+  <rect class="node nodeAmber" x="1275" y="815" width="250" height="96"/>
+  <text x="1400" y="843" text-anchor="middle" class="nodeTitle">rag_retrieval</text>
+  <text x="1400" y="866" text-anchor="middle" class="nodeText">retrieve_documents → synthesize_answer</text>
+  <text x="1400" y="884" text-anchor="middle" class="small">RAG 返回 snippets + related_files</text>
+
+  <rect class="node nodeBlue" x="1275" y="930" width="250" height="96"/>
+  <text x="1400" y="958" text-anchor="middle" class="nodeTitle">general_chat</text>
+  <text x="1400" y="981" text-anchor="middle" class="nodeText">generate_chat_answer</text>
+  <text x="1400" y="999" text-anchor="middle" class="small">带最近 4 条历史消息进 LLM</text>
+
+  <path class="lineDashed" d="M1230 778 L1275 754"/>
+  <path class="lineDashed" d="M1230 778 L1275 863"/>
+  <path class="lineDashed" d="M1230 778 L1275 978"/>
+
+  <!-- RAG internals -->
+  <rect class="node nodeAmber" x="1290" y="1080" width="220" height="78"/>
+  <text x="1400" y="1108" text-anchor="middle" class="nodeTitle">AIRagService.retrieve</text>
+  <text x="1400" y="1131" text-anchor="middle" class="nodeText">query → embedding → pgvector 检索</text>
+
+  <rect class="node nodeAmber" x="1290" y="1180" width="220" height="78"/>
+  <text x="1400" y="1208" text-anchor="middle" class="nodeTitle">build snippets/files</text>
+  <text x="1400" y="1231" text-anchor="middle" class="nodeText">score 过滤、去重、文件聚合</text>
+
+  <rect class="node nodeAmber" x="1590" y="1080" width="220" height="78"/>
+  <text x="1700" y="1108" text-anchor="middle" class="nodeTitle">embed_texts(query)</text>
+  <text x="1700" y="1131" text-anchor="middle" class="nodeText">豆包 / Ark embedding</text>
+
+  <rect class="node nodeAmber" x="1590" y="1180" width="220" height="78"/>
+  <text x="1700" y="1208" text-anchor="middle" class="nodeTitle">search_text_similar_chunks</text>
+  <text x="1700" y="1231" text-anchor="middle" class="nodeText">按 user_id 过滤 + 余弦距离排序</text>
+
+  <rect class="store" x="1940" y="1080" width="220" height="78"/>
+  <text x="2050" y="1108" text-anchor="middle" class="storeText">uploaded_file_text_vector</text>
+  <text x="2050" y="1131" text-anchor="middle" class="small" fill="#cbd5e1">文本向量表</text>
+
+  <rect class="store" x="1940" y="1180" width="220" height="78"/>
+  <text x="2050" y="1208" text-anchor="middle" class="storeText">uploaded_file</text>
+  <text x="2050" y="1231" text-anchor="middle" class="small" fill="#cbd5e1">文件元数据 / public_url</text>
+
+  <path class="line" d="M1400 911 L1400 1080"/>
+  <path class="line" d="M1510 1119 L1590 1119"/>
+  <path class="line" d="M1810 1119 L1940 1119"/>
+  <path class="line" d="M1810 1219 L1940 1219"/>
+  <path class="line" d="M1700 1158 L1700 1180"/>
+  <path class="line" d="M1590 1219 L1510 1219"/>
+  <path class="line" d="M1400 1258 L1400 1180"/>
+  <path class="line" d="M1290 1219 L1230 1219 L1230 892"/>
+
+  <!-- SSE -->
+  <rect class="node nodeBlue" x="90" y="1000" width="220" height="88"/>
+  <text x="200" y="1028" text-anchor="middle" class="nodeTitle">发送消息并订阅 SSE</text>
+  <text x="200" y="1051" text-anchor="middle" class="nodeText">POST /messages/stream</text>
+  <text x="200" y="1069" text-anchor="middle" class="small">前端边收边渲染 chatbox</text>
+
+  <rect class="node nodeBlue" x="390" y="1000" width="220" height="88"/>
+  <text x="500" y="1028" text-anchor="middle" class="nodeTitle">stream_ai_conversation_message</text>
+  <text x="500" y="1051" text-anchor="middle" class="nodeText">先写 user_message</text>
+  <text x="500" y="1069" text-anchor="middle" class="small">随后输出 SSE events</text>
+
+  <rect class="node nodePurple" x="970" y="1080" width="260" height="96"/>
+  <text x="1100" y="1108" text-anchor="middle" class="nodeTitle">stream_invoke</text>
+  <text x="1100" y="1131" text-anchor="middle" class="nodeText">assistant_start / delta / done</text>
+  <text x="1100" y="1149" text-anchor="middle" class="small">流式逻辑与同步 invoke 基本等价</text>
+
+  <rect class="callout" x="90" y="1110" width="220" height="96"/>
+  <text x="110" y="1138" class="calloutTitle">SSE 事件顺序</text>
+  <text x="110" y="1164" class="calloutText">1. user_message</text>
+  <text x="110" y="1187" class="calloutText">2. assistant_start</text>
+  <text x="110" y="1210" class="calloutText">3. assistant_delta*</text>
+  <text x="110" y="1233" class="calloutText">4. assistant_done</text>
+
+  <path class="line" d="M310 1044 L390 1044"/>
+  <path class="line" d="M610 1044 L970 1128"/>
+  <path class="lineDashed" d="M1230 1128 L390 1128"/>
+
+  <!-- Upload + vectorization -->
+  <rect class="node nodeBlue" x="90" y="1300" width="220" height="88"/>
+  <text x="200" y="1328" text-anchor="middle" class="nodeTitle">上传文件</text>
+  <text x="200" y="1351" text-anchor="middle" class="nodeText">DOCX / PDF / PNG</text>
+  <text x="200" y="1369" text-anchor="middle" class="small">供后续 RAG 检索使用</text>
+
+  <rect class="node nodeBlue" x="390" y="1300" width="220" height="88"/>
+  <text x="500" y="1328" text-anchor="middle" class="nodeTitle">POST /api/uploads</text>
+  <text x="500" y="1351" text-anchor="middle" class="nodeText">UploadService.upload_file</text>
+  <text x="500" y="1369" text-anchor="middle" class="small">校验大小 / 扩展名</text>
+
+  <rect class="node nodeGreen" x="1590" y="1290" width="220" height="88"/>
+  <text x="1700" y="1318" text-anchor="middle" class="nodeTitle">上传 OSS + 写 uploaded_file</text>
+  <text x="1700" y="1341" text-anchor="middle" class="nodeText">vector_status = PENDING</text>
+  <text x="1700" y="1359" text-anchor="middle" class="small">BackgroundTasks 投递向量化</text>
+
+  <rect class="store" x="1940" y="1290" width="220" height="88"/>
+  <text x="2050" y="1318" text-anchor="middle" class="storeText">OSS 原文件</text>
+  <text x="2050" y="1341" text-anchor="middle" class="storeText">uploaded_file</text>
+  <text x="2050" y="1359" text-anchor="middle" class="small" fill="#cbd5e1">元数据 / 状态 / public_url</text>
+
+  <rect class="node nodeGreen" x="1590" y="1400" width="220" height="88"/>
+  <text x="1700" y="1428" text-anchor="middle" class="nodeTitle">vectorize_uploaded_file</text>
+  <text x="1700" y="1451" text-anchor="middle" class="nodeText">Parsing → Cleaning → Chunking</text>
+  <text x="1700" y="1469" text-anchor="middle" class="small">再做 text/image embedding</text>
+
+  <rect class="node nodeGreen" x="1590" y="1505" width="220" height="88"/>
+  <text x="1700" y="1533" text-anchor="middle" class="nodeTitle">replace_text_chunks / image_vectors</text>
+  <text x="1700" y="1556" text-anchor="middle" class="nodeText">更新向量表与 uploaded_file 状态</text>
+  <text x="1700" y="1574" text-anchor="middle" class="small">VECTORIZED / FAILED</text>
+
+  <rect class="store" x="1940" y="1400" width="220" height="88"/>
+  <text x="2050" y="1428" text-anchor="middle" class="storeText">uploaded_file_text_vector</text>
+  <text x="2050" y="1451" text-anchor="middle" class="small" fill="#cbd5e1">small_chunk / large_chunk / embedding</text>
+
+  <rect class="store" x="1940" y="1505" width="220" height="88"/>
+  <text x="2050" y="1533" text-anchor="middle" class="storeText">uploaded_file_image_vector</text>
+  <text x="2050" y="1556" text-anchor="middle" class="small" fill="#cbd5e1">PNG 图像向量</text>
+
+  <path class="line" d="M310 1344 L390 1344"/>
+  <path class="line" d="M610 1344 L1590 1334"/>
+  <path class="line" d="M1810 1334 L1940 1334"/>
+  <path class="line" d="M1700 1378 L1700 1400"/>
+  <path class="line" d="M1810 1444 L1940 1444"/>
+  <path class="line" d="M1700 1488 L1700 1505"/>
+  <path class="line" d="M1810 1549 L1940 1549"/>
+  <path class="lineDashed" d="M1940 1444 L1510 1444 L1510 1180"/>
+
+  <!-- Callouts -->
+  <rect class="callout" x="1265" y="250" width="520" height="140"/>
+  <text x="1285" y="280" class="calloutTitle">当前实现的两个记忆层</text>
+  <text x="1285" y="307" class="calloutText">1. 业务消息表：ai_conversation / ai_message / ai_message_reference</text>
+  <text x="1285" y="334" class="calloutText">2. LangGraph checkpoint：PostgreSQL 中按 conversation_id 维护 thread 状态</text>
+  <text x="1285" y="361" class="calloutText">同步 invoke 真正使用 compile(checkpointer=PostgresSaver)，SSE 目前是手写流式编排。</text>
+
+  <rect class="callout" x="1265" y="530" width="520" height="132"/>
+  <text x="1285" y="560" class="calloutTitle">意图识别结果</text>
+  <text x="1285" y="587" class="calloutText">general_chat：普通聊天，直接走 LLM 对话</text>
+  <text x="1285" y="614" class="calloutText">rag_retrieval：查资料/查文件/制度手册，走 embedding + pgvector 检索</text>
+  <text x="1285" y="641" class="calloutText">generate_flow_from_file：先返回候选文件，等待前端单选后再恢复生成 chapter flow</text>
+
+  <rect class="callout" x="1265" y="1360" width="520" height="170"/>
+  <text x="1285" y="1390" class="calloutTitle">RAG 依赖关系</text>
+  <text x="1285" y="1417" class="calloutText">上传文件后先进入 OSS 与 uploaded_file。</text>
+  <text x="1285" y="1444" class="calloutText">后台向量化成功后，文本块写入 uploaded_file_text_vector。</text>
+  <text x="1285" y="1471" class="calloutText">问答时 query 先生成 embedding，再按 user_id 检索命中的 chunk。</text>
+  <text x="1285" y="1498" class="calloutText">命中结果回组装成 snippets 与 related_files，并最终写入 ai_message_reference。</text>
+ </svg>

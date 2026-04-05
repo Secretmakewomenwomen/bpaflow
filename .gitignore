@@ -1,0 +1,13 @@
+node_modules
+dist
+.corepack
+.pnpm-store
+.superpowers
+backend/.venv
+backend/.env
+backend/.pytest_cache
+/.pytest_cache
+backend/tests
+.corepack-cache-2
+.corepack-cache
+**/**/__pycache__

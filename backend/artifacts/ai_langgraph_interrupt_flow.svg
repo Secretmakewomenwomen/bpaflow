@@ -1,0 +1,284 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1880" viewBox="0 0 2200 1880" role="img" aria-labelledby="title desc">
+  <title id="title">AI Assistant LangGraph With Interrupt Flow</title>
+  <desc id="desc">AI 助手 LangGraph 主链路、tool loop、流程图文件选择 interrupt 与 resume 生成 artifact 的自上而下流程图。</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .lane { fill: #ffffff; stroke: #d7deea; stroke-width: 1.2; }
+      .laneTitle { font: 700 22px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #0f172a; }
+      .sectionTitle { font: 700 24px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #0f172a; }
+      .sectionNote { font: 400 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #475569; }
+      .node { stroke: #30435f; stroke-width: 1.5; rx: 18; ry: 18; }
+      .nodeBlue { fill: #e8f1ff; }
+      .nodeGreen { fill: #eaf8ef; }
+      .nodePurple { fill: #f2ecff; }
+      .nodeAmber { fill: #fff5df; }
+      .nodeRose { fill: #ffecef; }
+      .nodeSlate { fill: #eef3f8; }
+      .nodeTitle { font: 700 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #0f172a; }
+      .nodeText { font: 400 13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #334155; }
+      .small { font: 400 12px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #475569; }
+      .store { fill: #0f172a; stroke: #0f172a; stroke-width: 1.5; rx: 16; ry: 16; }
+      .storeText { font: 700 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #f8fafc; }
+      .line { stroke: #475569; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .lineDashed { stroke: #64748b; stroke-width: 2; fill: none; stroke-dasharray: 7 6; marker-end: url(#arrow); }
+      .branch { font: 700 12px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #7c3aed; }
+      .divider { stroke: #cfd8e3; stroke-width: 1; stroke-dasharray: 5 5; }
+      .callout { fill: #ffffff; stroke: #c9d5e6; stroke-width: 1.2; rx: 16; ry: 16; }
+      .calloutTitle { font: 700 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #0f172a; }
+      .calloutText { font: 400 13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; fill: #334155; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="2200" height="1880"/>
+
+  <text x="70" y="54" class="sectionTitle">AI 助手 LangGraph + Interrupt 流程图</text>
+  <text x="70" y="82" class="sectionNote">范围：消息入口、LangGraph 节点、tool registry / executor、流程图文件选择 interrupt、resume 生成 chapter_flow_json artifact</text>
+
+  <rect class="lane" x="50" y="110" width="300" height="1710"/>
+  <rect class="lane" x="350" y="110" width="300" height="1710"/>
+  <rect class="lane" x="650" y="110" width="420" height="1710"/>
+  <rect class="lane" x="1070" y="110" width="420" height="1710"/>
+  <rect class="lane" x="1490" y="110" width="300" height="1710"/>
+  <rect class="lane" x="1790" y="110" width="360" height="1710"/>
+
+  <text x="200" y="145" text-anchor="middle" class="laneTitle">前端</text>
+  <text x="500" y="145" text-anchor="middle" class="laneTitle">AI API 路由</text>
+  <text x="860" y="145" text-anchor="middle" class="laneTitle">LangGraph / Assistant</text>
+  <text x="1280" y="145" text-anchor="middle" class="laneTitle">工具 / Interrupt 服务</text>
+  <text x="1640" y="145" text-anchor="middle" class="laneTitle">会话 / 文件服务</text>
+  <text x="1970" y="145" text-anchor="middle" class="laneTitle">存储 / 文档解析</text>
+
+  <line class="divider" x1="60" y1="205" x2="2140" y2="205"/>
+  <text x="70" y="193" class="small">A. 主链路：发送消息进入 LangGraph</text>
+
+  <line class="divider" x1="60" y1="1040" x2="2140" y2="1040"/>
+  <text x="70" y="1028" class="small">B. Tool loop：模型决定是否调用 list_recent_files / get_file_detail / search_knowledge_base / query_users</text>
+
+  <line class="divider" x1="60" y1="1505" x2="2140" y2="1505"/>
+  <text x="70" y="1493" class="small">C. Interrupt / Resume：根据文件生成流程图 → human-in-the-loop 选择文件 → 生成 artifact</text>
+
+  <rect class="node nodeBlue" x="90" y="245" width="220" height="88"/>
+  <text x="200" y="273" text-anchor="middle" class="nodeTitle">AI 助手输入消息</text>
+  <text x="200" y="296" text-anchor="middle" class="nodeText">POST /messages/stream</text>
+  <text x="200" y="314" text-anchor="middle" class="small">前端发起 SSE 对话</text>
+
+  <rect class="node nodeBlue" x="390" y="245" width="220" height="88"/>
+  <text x="500" y="273" text-anchor="middle" class="nodeTitle">stream_ai_conversation_message</text>
+  <text x="500" y="296" text-anchor="middle" class="nodeText">先持久化 user_message</text>
+  <text x="500" y="314" text-anchor="middle" class="small">再调用 stream_invoke()</text>
+
+  <rect class="node nodeGreen" x="1530" y="245" width="220" height="88"/>
+  <text x="1640" y="273" text-anchor="middle" class="nodeTitle">create_user_message</text>
+  <text x="1640" y="296" text-anchor="middle" class="nodeText">role = user</text>
+  <text x="1640" y="314" text-anchor="middle" class="small">写 ai_message</text>
+
+  <rect class="store" x="1910" y="245" width="240" height="88"/>
+  <text x="2030" y="275" text-anchor="middle" class="storeText">ai_message</text>
+  <text x="2030" y="297" text-anchor="middle" class="storeText">user turn</text>
+  <text x="2030" y="315" text-anchor="middle" class="small" fill="#cbd5e1">会话历史</text>
+
+  <rect class="node nodePurple" x="720" y="245" width="280" height="88"/>
+  <text x="860" y="273" text-anchor="middle" class="nodeTitle">stream_invoke</text>
+  <text x="860" y="296" text-anchor="middle" class="nodeText">graph.stream(stream_mode=custom, updates)</text>
+  <text x="860" y="314" text-anchor="middle" class="small">assistant_start / delta / done</text>
+
+  <rect class="node nodePurple" x="720" y="380" width="280" height="82"/>
+  <text x="860" y="408" text-anchor="middle" class="nodeTitle">LangGraph START</text>
+  <text x="860" y="431" text-anchor="middle" class="nodeText">thread_id = conversation_id</text>
+
+  <rect class="node nodePurple" x="720" y="500" width="280" height="84"/>
+  <text x="860" y="528" text-anchor="middle" class="nodeTitle">load_history</text>
+  <text x="860" y="551" text-anchor="middle" class="nodeText">get_recent_messages(limit=max_context_blocks)</text>
+  <text x="860" y="569" text-anchor="middle" class="small">恢复最近多轮上下文</text>
+
+  <rect class="node nodeGreen" x="1530" y="500" width="220" height="84"/>
+  <text x="1640" y="528" text-anchor="middle" class="nodeTitle">get_recent_messages</text>
+  <text x="1640" y="551" text-anchor="middle" class="nodeText">AiConversationService</text>
+  <text x="1640" y="569" text-anchor="middle" class="small">读取会话历史</text>
+
+  <rect class="node nodePurple" x="720" y="620" width="280" height="88"/>
+  <text x="860" y="648" text-anchor="middle" class="nodeTitle">run_agent_loop</text>
+  <text x="860" y="671" text-anchor="middle" class="nodeText">先做 interrupt 判断</text>
+  <text x="860" y="689" text-anchor="middle" class="small">再决定是否进入 tool loop</text>
+
+  <rect class="node nodePurple" x="720" y="760" width="280" height="84"/>
+  <text x="860" y="788" text-anchor="middle" class="nodeTitle">build_response</text>
+  <text x="860" y="811" text-anchor="middle" class="nodeText">组装 AssistantResponse</text>
+  <text x="860" y="829" text-anchor="middle" class="small">status / answer / references / artifact / actions</text>
+
+  <rect class="node nodePurple" x="720" y="890" width="280" height="84"/>
+  <text x="860" y="918" text-anchor="middle" class="nodeTitle">persist_message</text>
+  <text x="860" y="941" text-anchor="middle" class="nodeText">create_assistant_message</text>
+  <text x="860" y="959" text-anchor="middle" class="small">写 assistant message + payload_json</text>
+
+  <rect class="node nodeGreen" x="1530" y="890" width="220" height="84"/>
+  <text x="1640" y="918" text-anchor="middle" class="nodeTitle">create_assistant_message</text>
+  <text x="1640" y="941" text-anchor="middle" class="nodeText">AiConversationService</text>
+  <text x="1640" y="959" text-anchor="middle" class="small">持久化助手输出</text>
+
+  <rect class="store" x="1910" y="890" width="240" height="84"/>
+  <text x="2030" y="918" text-anchor="middle" class="storeText">ai_message</text>
+  <text x="2030" y="941" text-anchor="middle" class="storeText">payload_json</text>
+  <text x="2030" y="959" text-anchor="middle" class="small" fill="#cbd5e1">pending_action / artifact / actions</text>
+
+  <path class="line" d="M310 289 L390 289"/>
+  <path class="line" d="M610 289 L720 289"/>
+  <path class="line" d="M610 289 L1530 289"/>
+  <path class="line" d="M1750 289 L1910 289"/>
+  <path class="line" d="M860 333 L860 380"/>
+  <path class="line" d="M860 462 L860 500"/>
+  <path class="line" d="M1000 542 L1530 542"/>
+  <path class="line" d="M860 584 L860 620"/>
+  <path class="line" d="M860 708 L860 760"/>
+  <path class="line" d="M860 844 L860 890"/>
+  <path class="line" d="M1000 932 L1530 932"/>
+  <path class="line" d="M1750 932 L1910 932"/>
+
+  <text x="1020" y="665" class="branch">先判 interrupt，再走 tool loop</text>
+
+  <rect class="node nodeSlate" x="720" y="1090" width="280" height="90"/>
+  <text x="860" y="1118" text-anchor="middle" class="nodeTitle">OpenAI chat.completions.create</text>
+  <text x="860" y="1141" text-anchor="middle" class="nodeText">tool_choice = auto</text>
+  <text x="860" y="1159" text-anchor="middle" class="small">system + history + user + tools</text>
+
+  <rect class="node nodeSlate" x="720" y="1215" width="280" height="90"/>
+  <text x="860" y="1243" text-anchor="middle" class="nodeTitle">模型返回 tool_calls?</text>
+  <text x="860" y="1266" text-anchor="middle" class="nodeText">无则输出 final answer</text>
+  <text x="860" y="1284" text-anchor="middle" class="small">有则逐个执行 ToolExecutor</text>
+
+  <rect class="node nodePurple" x="1120" y="1090" width="320" height="90"/>
+  <text x="1280" y="1118" text-anchor="middle" class="nodeTitle">_build_tool_schemas()</text>
+  <text x="1280" y="1141" text-anchor="middle" class="nodeText">query_users / list_recent_files / get_file_detail / search_knowledge_base</text>
+  <text x="1280" y="1159" text-anchor="middle" class="small">按 service 是否可用决定暴露给模型</text>
+
+  <rect class="node nodeAmber" x="1120" y="1215" width="320" height="104"/>
+  <text x="1280" y="1243" text-anchor="middle" class="nodeTitle">ToolExecutor.execute</text>
+  <text x="1280" y="1266" text-anchor="middle" class="nodeText">get_tool → validate args → dispatch service</text>
+  <text x="1280" y="1284" text-anchor="middle" class="small">tool_start / tool_result / tool_trace</text>
+  <text x="1280" y="1302" text-anchor="middle" class="small">失败时最多允许一次自纠重试</text>
+
+  <rect class="node nodeAmber" x="1530" y="1090" width="220" height="86"/>
+  <text x="1640" y="1118" text-anchor="middle" class="nodeTitle">WorkService.queryUsers</text>
+  <text x="1640" y="1141" text-anchor="middle" class="nodeText">tool: query_users</text>
+
+  <rect class="node nodeAmber" x="1530" y="1195" width="220" height="86"/>
+  <text x="1640" y="1223" text-anchor="middle" class="nodeTitle">UploadService.list_uploads</text>
+  <text x="1640" y="1246" text-anchor="middle" class="nodeText">tool: list_recent_files</text>
+
+  <rect class="node nodeAmber" x="1530" y="1300" width="220" height="86"/>
+  <text x="1640" y="1328" text-anchor="middle" class="nodeTitle">UploadService.get_file_detail</text>
+  <text x="1640" y="1351" text-anchor="middle" class="nodeText">tool: get_file_detail</text>
+
+  <rect class="node nodeAmber" x="1530" y="1405" width="220" height="86"/>
+  <text x="1640" y="1433" text-anchor="middle" class="nodeTitle">AIRagService.retrieve</text>
+  <text x="1640" y="1456" text-anchor="middle" class="nodeText">tool: search_knowledge_base</text>
+
+  <rect class="store" x="1910" y="1405" width="240" height="86"/>
+  <text x="2030" y="1435" text-anchor="middle" class="storeText">uploaded_file_text_vector</text>
+  <text x="2030" y="1457" text-anchor="middle" class="small" fill="#cbd5e1">RAG 按 user_id 检索 chunk</text>
+
+  <path class="line" d="M860 1040 L860 1090"/>
+  <path class="line" d="M1000 1135 L1120 1135"/>
+  <path class="line" d="M860 1180 L860 1215"/>
+  <path class="line" d="M1000 1260 L1120 1260"/>
+  <path class="line" d="M1440 1135 L1530 1135"/>
+  <path class="line" d="M1440 1260 L1530 1238"/>
+  <path class="line" d="M1440 1260 L1530 1343"/>
+  <path class="line" d="M1440 1260 L1530 1448"/>
+  <path class="line" d="M1750 1448 L1910 1448"/>
+  <path class="lineDashed" d="M1640 1491 L1640 1540 L1000 1540 L1000 760"/>
+
+  <rect class="callout" x="1120" y="1340" width="320" height="120"/>
+  <text x="1140" y="1370" class="calloutTitle">tool loop 结束后的响应归类</text>
+  <text x="1140" y="1397" class="calloutText">1. 若 search_knowledge_base 成功，落为 rag_retrieval</text>
+  <text x="1140" y="1424" class="calloutText">2. 若无 tool_calls，落为 general_chat</text>
+  <text x="1140" y="1451" class="calloutText">3. 若工具失败且无法自纠，返回工具调用失败</text>
+
+  <rect class="node nodeRose" x="720" y="1570" width="280" height="96"/>
+  <text x="860" y="1598" text-anchor="middle" class="nodeTitle">_is_generate_flow_from_file_request</text>
+  <text x="860" y="1621" text-anchor="middle" class="nodeText">包含 根据 / 生成 / 流程图 / 文件或文档</text>
+  <text x="860" y="1639" text-anchor="middle" class="small">命中后不进入普通 tool loop</text>
+
+  <rect class="node nodeRose" x="1120" y="1570" width="320" height="96"/>
+  <text x="1280" y="1598" text-anchor="middle" class="nodeTitle">FlowChartInterruptService.find_candidate_files</text>
+  <text x="1280" y="1621" text-anchor="middle" class="nodeText">最近 document/docx 文件名/标题匹配</text>
+  <text x="1280" y="1639" text-anchor="middle" class="small">返回 candidates 给 pending_action(select_file)</text>
+
+  <rect class="node nodeGreen" x="1530" y="1570" width="220" height="96"/>
+  <text x="1640" y="1598" text-anchor="middle" class="nodeTitle">UploadService.list_uploads</text>
+  <text x="1640" y="1621" text-anchor="middle" class="nodeText">limit = 200</text>
+  <text x="1640" y="1639" text-anchor="middle" class="small">只看 document / docx</text>
+
+  <rect class="node nodeRose" x="720" y="1705" width="280" height="96"/>
+  <text x="860" y="1733" text-anchor="middle" class="nodeTitle">返回 waiting_input</text>
+  <text x="860" y="1756" text-anchor="middle" class="nodeText">intent = generate_flow_from_file</text>
+  <text x="860" y="1774" text-anchor="middle" class="small">pending_action + action_id + candidates</text>
+
+  <rect class="node nodeBlue" x="90" y="1570" width="220" height="96"/>
+  <text x="200" y="1598" text-anchor="middle" class="nodeTitle">前端显示文件单选框</text>
+  <text x="200" y="1621" text-anchor="middle" class="nodeText">候选文件来自 pending_action</text>
+  <text x="200" y="1639" text-anchor="middle" class="small">human-in-the-loop interrupt</text>
+
+  <rect class="node nodeBlue" x="390" y="1705" width="220" height="96"/>
+  <text x="500" y="1733" text-anchor="middle" class="nodeTitle">POST /messages/resume</text>
+  <text x="500" y="1756" text-anchor="middle" class="nodeText">actionId + payload.uploadId</text>
+  <text x="500" y="1774" text-anchor="middle" class="small">确认所选文件</text>
+
+  <rect class="node nodeRose" x="1120" y="1705" width="320" height="96"/>
+  <text x="1280" y="1733" text-anchor="middle" class="nodeTitle">resume_flow_chart_generation</text>
+  <text x="1280" y="1756" text-anchor="middle" class="nodeText">校验 pending_action / upload_id / replay</text>
+  <text x="1280" y="1774" text-anchor="middle" class="small">通过后 build_artifact()</text>
+
+  <rect class="node nodeGreen" x="1530" y="1705" width="220" height="96"/>
+  <text x="1640" y="1733" text-anchor="middle" class="nodeTitle">get_messages</text>
+  <text x="1640" y="1756" text-anchor="middle" class="nodeText">回看完整会话</text>
+  <text x="1640" y="1774" text-anchor="middle" class="small">确认 action_id 未被处理</text>
+
+  <rect class="node nodeGreen" x="1530" y="1590" width="220" height="0" visibility="hidden"/>
+
+  <rect class="node nodeGreen" x="1830" y="1570" width="280" height="96"/>
+  <text x="1970" y="1598" text-anchor="middle" class="nodeTitle">ChapterFlowService.parse_upload</text>
+  <text x="1970" y="1621" text-anchor="middle" class="nodeText">读取 docx → 章节/小节解析 → graphPayload</text>
+  <text x="1970" y="1639" text-anchor="middle" class="small">artifact_type = chapter_flow_json</text>
+
+  <rect class="store" x="1910" y="1705" width="240" height="96"/>
+  <text x="2030" y="1735" text-anchor="middle" class="storeText">assistant message</text>
+  <text x="2030" y="1757" text-anchor="middle" class="storeText">artifact + actions</text>
+  <text x="2030" y="1775" text-anchor="middle" class="small" fill="#cbd5e1">导入 / 重新选择文件</text>
+
+  <path class="lineDashed" d="M860 708 L860 1570"/>
+  <path class="line" d="M310 1618 L720 1618"/>
+  <path class="line" d="M1000 1618 L1120 1618"/>
+  <path class="line" d="M1440 1618 L1530 1618"/>
+  <path class="line" d="M1750 1618 L1830 1618"/>
+  <path class="line" d="M860 1666 L860 1705"/>
+  <path class="line" d="M310 1618 L310 1753 L390 1753"/>
+  <path class="line" d="M610 1753 L1120 1753"/>
+  <path class="line" d="M1440 1753 L1530 1753"/>
+  <path class="line" d="M1440 1753 L1830 1618"/>
+  <path class="line" d="M2110 1618 L2110 1705"/>
+  <path class="line" d="M1750 1753 L1910 1753"/>
+
+  <rect class="callout" x="90" y="1085" width="520" height="132"/>
+  <text x="110" y="1115" class="calloutTitle">当前 tool registry</text>
+  <text x="110" y="1142" class="calloutText">query_users：工作台用户列表</text>
+  <text x="110" y="1169" class="calloutText">list_recent_files：最近上传文件</text>
+  <text x="110" y="1196" class="calloutText">get_file_detail：单文件详情</text>
+  <text x="110" y="1223" class="calloutText">search_knowledge_base：RAG 检索 snippets + related_files</text>
+
+  <rect class="callout" x="90" y="1688" width="220" height="106"/>
+  <text x="110" y="1718" class="calloutTitle">resume 后的前端动作</text>
+  <text x="110" y="1745" class="calloutText">1. 显示“导入”</text>
+  <text x="110" y="1772" class="calloutText">2. 显示“重新选择文件”</text>
+  <text x="110" y="1799" class="calloutText">3. 导入后渲染 mxGraph</text>
+
+  <rect class="callout" x="1120" y="245" width="320" height="120"/>
+  <text x="1140" y="275" class="calloutTitle">LangGraph 真正的节点图</text>
+  <text x="1140" y="302" class="calloutText">START → load_history → run_agent_loop → build_response → persist_message → END</text>
+  <text x="1140" y="329" class="calloutText">interrupt / tool loop 都发生在 run_agent_loop 内部</text>
+  <text x="1140" y="356" class="calloutText">resume_flow_chart_generation 是独立 API，不重新进入 StateGraph</text>
+</svg>

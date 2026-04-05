@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1760" height="1320" viewBox="0 0 1760 1320" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">文件上传到 OSS、MySQL、Milvus 的流程图</title>
+  <desc id="desc">展示文件上传、OSS 存储、元信息入库、后台向量化、Milvus 向量入库以及状态回写 MySQL 的完整流程。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f7f4ec"/>
+      <stop offset="100%" stop-color="#e8f1f5"/>
+    </linearGradient>
+    <linearGradient id="header" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0%" stop-color="#1e4d5c"/>
+      <stop offset="100%" stop-color="#5c8d89"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#16323a" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#24454f"/>
+    </marker>
+    <marker id="arrowSoft" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#8b6f47"/>
+    </marker>
+    <style>
+      .title { font: 700 34px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #ffffff; }
+      .subtitle { font: 500 15px "PingFang SC", "Microsoft YaHei", sans-serif; fill: rgba(255,255,255,0.9); }
+      .lane-title { font: 700 20px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #16323a; }
+      .node-title { font: 700 16px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #18323a; }
+      .node-text { font: 500 13px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #35505b; }
+      .small-text { font: 500 12px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #6a5b43; }
+      .lane { fill: rgba(255,255,255,0.58); stroke: rgba(28,62,72,0.16); stroke-width: 1.5; }
+      .node { fill: #ffffff; stroke: #9eb7bf; stroke-width: 1.5; filter: url(#shadow); }
+      .node-accent { fill: #fdfaf2; stroke: #c7b28d; stroke-width: 1.5; filter: url(#shadow); }
+      .node-db { fill: #f2f8fa; stroke: #8eb6c3; stroke-width: 1.5; filter: url(#shadow); }
+      .node-vector { fill: #f5f8f1; stroke: #9aad8f; stroke-width: 1.5; filter: url(#shadow); }
+      .decision { fill: #fff7e7; stroke: #c8a76a; stroke-width: 1.8; filter: url(#shadow); }
+      .line { stroke: #24454f; stroke-width: 2.4; fill: none; marker-end: url(#arrow); }
+      .line-soft { stroke: #8b6f47; stroke-width: 2.2; fill: none; stroke-dasharray: 8 6; marker-end: url(#arrowSoft); }
+      .divider { stroke: rgba(35,66,76,0.16); stroke-width: 1.4; stroke-dasharray: 6 8; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1760" height="1320" fill="url(#bg)"/>
+  <rect x="50" y="40" width="1660" height="92" rx="26" fill="url(#header)"/>
+  <text x="88" y="92" class="title">文件上传 → OSS → 元信息入库 → 后台向量化 → Milvus 入库</text>
+  <text x="88" y="117" class="subtitle">对应代码主链路：uploads.py → upload_service.py → oss_service.py → vectorization_service.py → milvus_service.py</text>
+
+  <rect x="50" y="170" width="360" height="1080" rx="28" class="lane"/>
+  <rect x="430" y="170" width="300" height="1080" rx="28" class="lane"/>
+  <rect x="750" y="170" width="390" height="1080" rx="28" class="lane"/>
+  <rect x="1160" y="170" width="550" height="1080" rx="28" class="lane"/>
+
+  <text x="80" y="215" class="lane-title">前端 / FastAPI 接口层</text>
+  <text x="460" y="215" class="lane-title">OSS</text>
+  <text x="780" y="215" class="lane-title">MySQL uploaded_file</text>
+  <text x="1190" y="215" class="lane-title">向量化任务 / Milvus</text>
+
+  <line x1="410" y1="170" x2="410" y2="1250" class="divider"/>
+  <line x1="730" y1="170" x2="730" y2="1250" class="divider"/>
+  <line x1="1140" y1="170" x2="1140" y2="1250" class="divider"/>
+
+  <rect x="90" y="260" width="280" height="74" rx="20" class="node-accent"/>
+  <text x="112" y="290" class="node-title">1. 前端发起上传</text>
+  <text x="112" y="314" class="node-text">POST /api/uploads</text>
+
+  <rect x="90" y="380" width="280" height="100" rx="20" class="node"/>
+  <text x="112" y="410" class="node-title">2. UploadService.upload_file</text>
+  <text x="112" y="434" class="node-text">校验扩展名、大小</text>
+  <text x="112" y="456" class="node-text">读取文件内容并写临时文件</text>
+
+  <polygon points="230,545 320,620 230,695 140,620" class="decision"/>
+  <text x="186" y="616" class="node-title">校验通过?</text>
+
+  <rect x="450" y="380" width="260" height="96" rx="20" class="node-accent"/>
+  <text x="472" y="410" class="node-title">3. 上传到 OSS</text>
+  <text x="472" y="434" class="node-text">OssService.upload_from_path</text>
+  <text x="472" y="456" class="node-text">返回 bucket / key / public_url</text>
+
+  <rect x="770" y="380" width="350" height="124" rx="20" class="node-db"/>
+  <text x="792" y="410" class="node-title">4. 插入文件元信息</text>
+  <text x="792" y="434" class="node-text">写入 file_name / file_ext / mime_type / file_size</text>
+  <text x="792" y="456" class="node-text">写入 oss_bucket / oss_key / public_url / status=UPLOADED</text>
+  <text x="792" y="478" class="node-text">初始化 vector_status / text_vector_status / image_vector_status</text>
+
+  <rect x="90" y="760" width="280" height="108" rx="20" class="node-accent"/>
+  <text x="112" y="790" class="node-title">5. 同步返回上传成功</text>
+  <text x="112" y="814" class="node-text">response_model = UploadResponse</text>
+  <text x="112" y="836" class="node-text">前端立即拿到 id、url、vectorStatus=PENDING</text>
+
+  <rect x="770" y="560" width="350" height="96" rx="20" class="node-db"/>
+  <text x="792" y="590" class="node-title">6. background_tasks.add_task</text>
+  <text x="792" y="614" class="node-text">异步调度 vectorize_uploaded_file</text>
+  <text x="792" y="636" class="node-text">上传接口到这里就结束，不等向量化完成</text>
+
+  <rect x="1180" y="300" width="500" height="108" rx="20" class="node-vector"/>
+  <text x="1202" y="330" class="node-title">7. 后台任务启动</text>
+  <text x="1202" y="354" class="node-text">VectorizationService.vectorize_uploaded_file(...)</text>
+  <text x="1202" y="376" class="node-text">先把 MySQL 状态改成 PROCESSING，再进入实际向量化</text>
+
+  <rect x="1180" y="460" width="500" height="132" rx="20" class="node-vector"/>
+  <text x="1202" y="490" class="node-title">8. 文本通道：解析 → 清洗 → 切块</text>
+  <text x="1202" y="514" class="node-text">ParsingService：docx / pdf / png OCR 解析为标准文本片段</text>
+  <text x="1202" y="536" class="node-text">TextCleaningService：清理分页符、HTML、页眉页脚、空白</text>
+  <text x="1202" y="558" class="node-text">ChunkingService：生成“小块检索 + 大块回填”的双层 chunk</text>
+  <text x="1202" y="580" class="node-text">无文本则抛出 No text content extracted for vectorization</text>
+
+  <rect x="1180" y="640" width="500" height="118" rx="20" class="node-vector"/>
+  <text x="1202" y="670" class="node-title">9. 文本向量化</text>
+  <text x="1202" y="694" class="node-text">EmbeddingService.embed_texts</text>
+  <text x="1202" y="716" class="node-text">Ark.multimodal_embeddings.create(input=[{"type":"text","text":...}])</text>
+  <text x="1202" y="738" class="node-text">按 MILVUS_TEXT_VECTOR_DIMENSION 截断并归一化</text>
+
+  <rect x="1180" y="806" width="500" height="118" rx="20" class="node-vector"/>
+  <text x="1202" y="836" class="node-title">10. 文本向量入库 Milvus</text>
+  <text x="1202" y="860" class="node-text">ensure_text_collection() 建集合 / HNSW 索引 / load</text>
+  <text x="1202" y="882" class="node-text">replace_text_chunks(file_id, rows) 先删旧数据再插新数据</text>
+  <text x="1202" y="904" class="node-text">写入元信息：file_id、文件名、页码、小块/大块文本、embedding</text>
+
+  <polygon points="1430,970 1520,1040 1430,1110 1340,1040" class="decision"/>
+  <text x="1396" y="1036" class="node-title">是否 PNG?</text>
+
+  <rect x="1180" y="1135" width="500" height="92" rx="20" class="node-vector"/>
+  <text x="1202" y="1165" class="node-title">11A. 非 PNG：结束文本通道</text>
+  <text x="1202" y="1189" class="node-text">更新 text_vector_status = VECTORIZED</text>
+  <text x="1202" y="1211" class="node-text">聚合 vector_status，必要时写入 vectorized_at</text>
+
+  <rect x="770" y="760" width="350" height="116" rx="20" class="node-db"/>
+  <text x="792" y="790" class="node-title">11B. PNG 额外走图片通道</text>
+  <text x="792" y="814" class="node-text">image_embedding_service.embed_image</text>
+  <text x="792" y="836" class="node-text">Ark.multimodal_embeddings.create(文本提示 + data URL 图片)</text>
+  <text x="792" y="858" class="node-text">按 MILVUS_IMAGE_VECTOR_DIMENSION 截断并归一化</text>
+
+  <rect x="770" y="930" width="350" height="116" rx="20" class="node-db"/>
+  <text x="792" y="960" class="node-title">12. 图片向量入库 Milvus</text>
+  <text x="792" y="984" class="node-text">ensure_image_collection() 建图片集合 / HNSW 索引</text>
+  <text x="792" y="1006" class="node-text">replace_image_vectors(file_id, rows)</text>
+  <text x="792" y="1028" class="node-text">写入 file_id、文件名、source_type=image、embedding</text>
+
+  <rect x="770" y="1100" width="350" height="128" rx="20" class="node-db"/>
+  <text x="792" y="1130" class="node-title">13. 回写 MySQL 向量状态</text>
+  <text x="792" y="1154" class="node-text">成功：text_vector_status / image_vector_status = VECTORIZED</text>
+  <text x="792" y="1176" class="node-text">调用 calculate_aggregate_vector_status 聚合 vector_status</text>
+  <text x="792" y="1198" class="node-text">写入 chunk_count、vectorized_at；失败时写 vector_error</text>
+
+  <text x="88" y="1286" class="small-text">注：上传接口先成功返回，再由 FastAPI BackgroundTasks 异步完成向量化与 Milvus 入库。</text>
+
+  <path d="M230 334 L230 380" class="line"/>
+  <path d="M230 480 L230 545" class="line"/>
+  <path d="M320 620 L450 428" class="line"/>
+  <path d="M710 428 L770 428" class="line"/>
+  <path d="M945 504 L945 560" class="line"/>
+  <path d="M230 695 L230 760" class="line-soft"/>
+  <path d="M945 656 L945 760 L370 760" class="line-soft"/>
+  <path d="M1120 618 L1180 354" class="line"/>
+  <path d="M1430 408 L1430 460" class="line"/>
+  <path d="M1430 592 L1430 640" class="line"/>
+  <path d="M1430 758 L1430 806" class="line"/>
+  <path d="M1430 924 L1430 970" class="line"/>
+  <path d="M1340 1040 L1120 1040" class="line"/>
+  <path d="M945 1046 L945 1100" class="line"/>
+  <path d="M1520 1040 L1680 1040 L1680 1180 L1120 1180" class="line"/>
+
+  <text x="208" y="735" class="small-text">校验失败：返回 400</text>
+  <text x="530" y="350" class="small-text">同步主链路</text>
+  <text x="982" y="726" class="small-text">异步分叉</text>
+  <text x="1558" y="1018" class="small-text">是</text>
+  <text x="1288" y="1018" class="small-text">否</text>
+</svg>

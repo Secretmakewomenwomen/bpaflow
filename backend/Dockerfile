@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM m.daocloud.io/docker.io/library/python:3.11-slim
 
 WORKDIR /app
 

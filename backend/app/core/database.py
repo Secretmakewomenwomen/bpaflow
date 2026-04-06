@@ -4,6 +4,7 @@ from collections.abc import Callable, Generator
 from typing import Any
 
 from sqlalchemy import create_engine, inspect
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 logger = logging.getLogger(__name__)
@@ -44,15 +45,33 @@ def create_tables(engine=None) -> None:
     )
 
     engine = engine or get_engine()
-    User.__table__.create(bind=engine, checkfirst=True)
-    UploadedFile.__table__.create(bind=engine, checkfirst=True)
-    WorkerFile.__table__.create(bind=engine, checkfirst=True)
-    CanvasTreeNode.__table__.create(bind=engine, checkfirst=True)
-    CanvasDocument.__table__.create(bind=engine, checkfirst=True)
-    AiConversation.__table__.create(bind=engine, checkfirst=True)
-    AiMessage.__table__.create(bind=engine, checkfirst=True)
-    AiMessageReference.__table__.create(bind=engine, checkfirst=True)
-    AiAgentTrace.__table__.create(bind=engine, checkfirst=True)
+    tables = [
+        User.__table__,
+        UploadedFile.__table__,
+        WorkerFile.__table__,
+        CanvasTreeNode.__table__,
+        CanvasDocument.__table__,
+        AiConversation.__table__,
+        AiMessage.__table__,
+        AiMessageReference.__table__,
+        AiAgentTrace.__table__,
+    ]
+
+    if engine.dialect.name == "postgresql":
+        # Guard startup migrations against concurrent cold starts in FC.
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "SELECT pg_advisory_xact_lock(hashtext('app_schema_bootstrap_v1'))"
+            )
+            for table in tables:
+                table.create(bind=connection, checkfirst=True)
+        return
+
+    for table in tables:
+        try:
+            table.create(bind=engine, checkfirst=True)
+        except IntegrityError:
+            logger.warning("ignored concurrent table creation race for %s", table.name)
 
 
 def ensure_pgvector_extension(engine=None) -> None:

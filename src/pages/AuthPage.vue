@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { login, register } from '../lib/auth';
+import { getCurrentTenantId, listTenants, setCurrentTenantId } from '../lib/tenant';
 
 const emit = defineEmits<{
   (event: 'authenticated'): void;
+  (event: 'go-tenants'): void;
 }>();
 
 const activeTab = ref<'login' | 'register'>('login');
 const submitting = ref(false);
+const loadingTenants = ref(false);
 const errorMessage = ref('');
+const tenantId = ref(getCurrentTenantId());
+const tenantOptions = ref<Array<{ label: string; value: string }>>([]);
 
 const loginForm = reactive({
   username: '',
@@ -21,6 +26,32 @@ const registerForm = reactive({
   confirmPassword: ''
 });
 
+async function refreshTenants() {
+  loadingTenants.value = true;
+  try {
+    const records = await listTenants();
+    tenantOptions.value = records
+      .filter((item) => item.enabled)
+      .map((item) => ({
+        label: `${item.name} (${item.tenant_id})`,
+        value: item.tenant_id
+      }));
+    if (!tenantOptions.value.some((item) => item.value === tenantId.value) && tenantOptions.value.length > 0) {
+      tenantId.value = tenantOptions.value[0].value;
+      setCurrentTenantId(tenantId.value);
+    }
+  } catch {
+    tenantOptions.value = [{ label: '默认租户 (default)', value: 'default' }];
+  } finally {
+    loadingTenants.value = false;
+  }
+}
+
+function handleTenantChange(value: string) {
+  tenantId.value = value;
+  setCurrentTenantId(value);
+}
+
 async function handleLogin() {
   if (submitting.value) {
     return;
@@ -29,6 +60,7 @@ async function handleLogin() {
   submitting.value = true;
   errorMessage.value = '';
   try {
+    setCurrentTenantId(tenantId.value);
     await login(loginForm.username.trim(), loginForm.password);
     emit('authenticated');
   } catch (error) {
@@ -51,6 +83,7 @@ async function handleRegister() {
   submitting.value = true;
   errorMessage.value = '';
   try {
+    setCurrentTenantId(tenantId.value);
     await register(registerForm.username.trim(), registerForm.password);
     emit('authenticated');
   } catch (error) {
@@ -59,6 +92,10 @@ async function handleRegister() {
     submitting.value = false;
   }
 }
+
+onMounted(() => {
+  void refreshTenants();
+});
 </script>
 
 <template>
@@ -84,9 +121,21 @@ async function handleRegister() {
       <template #title>
         <div class="auth-card-title">
           <span>账号认证</span>
-          <small>登录或注册后进入画布工作台</small>
+          <small>登录或注册后进入画布工作台（按租户隔离）</small>
         </div>
       </template>
+
+      <a-space class="auth-tenant-actions" align="center">
+        <a-select
+          class="auth-tenant-select"
+          :value="tenantId"
+          :options="tenantOptions"
+          :loading="loadingTenants"
+          placeholder="选择租户"
+          @change="handleTenantChange"
+        />
+        <a-button @click="emit('go-tenants')">租户管理</a-button>
+      </a-space>
 
       <a-alert
         v-if="errorMessage"

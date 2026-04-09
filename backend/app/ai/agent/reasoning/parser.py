@@ -13,6 +13,7 @@ _REACT_THOUGHT_RE = re.compile(r"(?mi)^\s*Thought:\s*(?P<thought>.+?)\s*$")
 
 
 def extract_tool_calls(message: Any) -> tuple[list[ToolCall], str | None]:
+    """从模型返回的 tool_calls 字段中解析出标准 ToolCall 列表。"""
     raw_calls = _read_attribute(message, "tool_calls") or []
     parsed_calls: list[ToolCall] = []
 
@@ -39,6 +40,7 @@ def extract_tool_calls(message: Any) -> tuple[list[ToolCall], str | None]:
 
 
 def parse_tool_arguments(raw_arguments: str) -> tuple[dict[str, Any], str | None]:
+    """把工具参数文本解析成 JSON 对象，并返回参数错误信息。"""
     arguments_text = raw_arguments.strip()
     if not arguments_text:
         return {}, None
@@ -52,11 +54,12 @@ def parse_tool_arguments(raw_arguments: str) -> tuple[dict[str, Any], str | None
 
 
 def extract_completion_text(content: Any) -> str:
+    """从任意 completion content 结构中提取纯文本内容。"""
     return _extract_text_parts(content).strip()
 
 
 def extract_legacy_react_action(content_text: str) -> ToolCall | None:
-    """Parse legacy text ReAct: `Action: {"tool_name": "...", "tool_args": {...}}`."""
+    """解析文本版 ReAct 中的 Action 行，兼容旧格式工具调用。"""
     if not content_text:
         return None
     match = _REACT_ACTION_RE.search(content_text)
@@ -77,7 +80,7 @@ def extract_legacy_react_action(content_text: str) -> ToolCall | None:
 
 
 def extract_legacy_react_thought(content_text: str) -> str | None:
-    """Parse legacy text ReAct: `Thought: ...`."""
+    """解析文本版 ReAct 中的 Thought 行。"""
     if not content_text:
         return None
     match = _REACT_THOUGHT_RE.search(content_text)
@@ -88,7 +91,7 @@ def extract_legacy_react_thought(content_text: str) -> str | None:
 
 
 def extract_legacy_react_final_answer(content_text: str) -> str | None:
-    """Parse legacy text ReAct: `Final Answer: ...`."""
+    """解析文本版 ReAct 中的 Final Answer 行。"""
     if not content_text:
         return None
     match = _REACT_FINAL_RE.search(content_text)
@@ -99,6 +102,7 @@ def extract_legacy_react_final_answer(content_text: str) -> str | None:
 
 
 def _normalize_raw_arguments(raw_arguments: Any) -> str:
+    """把任意形态的工具参数统一规整成可 JSON 解析的字符串。"""
     if isinstance(raw_arguments, str):
         return raw_arguments
     if isinstance(raw_arguments, Mapping):
@@ -109,6 +113,7 @@ def _normalize_raw_arguments(raw_arguments: Any) -> str:
 
 
 def _read_attribute(payload: Any, key: str) -> Any:
+    """统一读取 dict/object 上的同名字段，减少解析分支判断。"""
     if payload is None:
         return None
     if isinstance(payload, Mapping):
@@ -117,6 +122,7 @@ def _read_attribute(payload: Any, key: str) -> Any:
 
 
 def _extract_text_parts(content: Any) -> str:
+    """递归展开 content 中的嵌套文本片段，拼成一段可读文本。"""
     if content is None:
         return ""
     if isinstance(content, str):

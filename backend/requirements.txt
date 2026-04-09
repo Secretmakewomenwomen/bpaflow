@@ -19,5 +19,6 @@ pytesseract
 python-docx
 pytest
 httpx
+mcp
 volcengine-python-sdk[ark]
 PyJWT

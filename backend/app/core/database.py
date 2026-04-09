@@ -3,7 +3,8 @@ import re
 from collections.abc import Callable, Generator
 from typing import Any
 
-from sqlalchemy import create_engine, inspect
+from fastapi import Depends, Header, HTTPException, status
+from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -16,6 +17,9 @@ class Base(DeclarativeBase):
 
 _engine = None
 _session_local = None
+_tenant_engine_by_id: dict[str, Any] = {}
+_tenant_session_local_by_id: dict[str, Any] = {}
+_tenant_db_url_by_id: dict[str, str] = {}
 
 
 def get_engine():
@@ -29,6 +33,96 @@ def get_engine():
             pool_pre_ping=True,
         )
     return _engine
+
+
+def _normalize_database_url(database_url: str) -> str:
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return database_url
+
+
+def get_control_session_local():
+    global _session_local
+    if _session_local is None:
+        _session_local = sessionmaker(
+            bind=get_engine(),
+            autoflush=False,
+            autocommit=False,
+            class_=Session,
+        )
+    return _session_local
+
+
+def get_tenant_id(
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-Id"),
+) -> str:
+    from app.core.config import get_settings
+
+    fallback_tenant_id = get_settings().default_tenant_id
+    tenant_id = (x_tenant_id or fallback_tenant_id).strip()
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="租户标识不能为空。",
+        )
+    return tenant_id
+
+
+def _load_tenant_database_url(tenant_id: str) -> str:
+    from app.core.config import get_settings
+    from app.models.tenant import Tenant
+
+    settings = get_settings()
+    if tenant_id == settings.default_tenant_id:
+        return settings.postgres_database_url
+
+    with get_control_session_local()() as control_db:
+        tenant = control_db.scalar(
+            select(Tenant).where(
+                Tenant.tenant_id == tenant_id,
+                Tenant.enabled.is_(True),
+            )
+        )
+
+    if tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"租户不存在或已停用: {tenant_id}",
+        )
+
+    return tenant.database_url
+
+
+def get_tenant_engine(tenant_id: str):
+    tenant_db_url = _normalize_database_url(_load_tenant_database_url(tenant_id))
+    cached_url = _tenant_db_url_by_id.get(tenant_id)
+    cached_engine = _tenant_engine_by_id.get(tenant_id)
+    if cached_engine is not None and cached_url == tenant_db_url:
+        return cached_engine
+
+    tenant_engine = create_engine(
+        tenant_db_url,
+        pool_pre_ping=True,
+    )
+    _tenant_db_url_by_id[tenant_id] = tenant_db_url
+    _tenant_engine_by_id[tenant_id] = tenant_engine
+    _tenant_session_local_by_id[tenant_id] = sessionmaker(
+        bind=tenant_engine,
+        autoflush=False,
+        autocommit=False,
+        class_=Session,
+    )
+    return tenant_engine
+
+
+def get_tenant_database_url(tenant_id: str) -> str:
+    return _load_tenant_database_url(tenant_id)
+
+
+def get_tenant_session_local(tenant_id: str):
+    if tenant_id not in _tenant_session_local_by_id:
+        get_tenant_engine(tenant_id)
+    return _tenant_session_local_by_id[tenant_id]
 
 
 def create_tables(engine=None) -> None:
@@ -82,6 +176,16 @@ def ensure_pgvector_extension(engine=None) -> None:
 
     with engine.begin() as connection:
         connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
+
+
+def ensure_pg_search_extension(engine=None) -> None:
+    engine = engine or get_engine()
+
+    if engine.dialect.name != "postgresql":
+        return
+
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_search")
 
 
 def ensure_vector_store_schema(engine=None) -> None:
@@ -148,6 +252,29 @@ def ensure_vector_store_schema(engine=None) -> None:
 
 def build_bm25_index_name(table_name: str) -> str:
     return f"idx_{table_name}_bm25"
+
+
+def ensure_pg_search_bm25_index(engine=None) -> None:
+    from app.core.config import get_settings
+
+    engine = engine or get_engine()
+    if not hasattr(engine, "dialect") or engine.dialect.name != "postgresql":
+        return
+
+    settings = get_settings()
+    table_name = settings.pgvector_text_table
+    _require_simple_pg_identifier(table_name, label="Settings.pgvector_text_table")
+    index_name = build_bm25_index_name(table_name)
+    _require_simple_pg_identifier(index_name, label="BM25 index name")
+
+    statement = (
+        f"CREATE INDEX IF NOT EXISTS {index_name} "
+        f"ON {table_name} USING bm25 "
+        "(id, file_id, file_name, small_chunk_index, created_at, small_chunk_text) "
+        "WITH (key_field = 'id')"
+    )
+    with engine.begin() as connection:
+        connection.exec_driver_sql(statement)
 
 
 def _get_pg_extension_version(engine: Any, extension_name: str) -> str | None:
@@ -526,20 +653,49 @@ def ensure_canvas_schema(engine=None, inspector=None) -> None:
             connection.exec_driver_sql(statement)
 
 
-def get_session_local():
-    global _session_local
-    if _session_local is None:
-        _session_local = sessionmaker(
-            bind=get_engine(),
-            autoflush=False,
-            autocommit=False,
-            class_=Session,
+def ensure_tenant_registry_schema(engine=None) -> None:
+    from app.core.config import get_settings
+    from app.models.tenant import Tenant
+
+    engine = engine or get_engine()
+    settings = get_settings()
+
+    Tenant.__table__.create(bind=engine, checkfirst=True)
+
+    with get_control_session_local()() as control_db:
+        default_tenant = control_db.scalar(
+            select(Tenant).where(Tenant.tenant_id == settings.default_tenant_id)
         )
-    return _session_local
+        if default_tenant is None:
+            control_db.add(
+                Tenant(
+                    tenant_id=settings.default_tenant_id,
+                    name="默认租户",
+                    database_url=settings.postgres_database_url,
+                    config_json="{}",
+                    enabled=True,
+                )
+            )
+            control_db.commit()
 
 
-def get_db() -> Generator[Session, None, None]:
-    db = get_session_local()()
+def get_session_local():
+    return get_control_session_local()
+
+
+def get_control_db() -> Generator[Session, None, None]:
+    db = get_control_session_local()()
+
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def get_db(
+    tenant_id: str = Depends(get_tenant_id),
+) -> Generator[Session, None, None]:
+    db = get_tenant_session_local(tenant_id)()
 
     try:
         yield db

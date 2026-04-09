@@ -1,6 +1,8 @@
 import { defineConfig } from '@rsbuild/core';
 import { pluginVue } from '@rsbuild/plugin-vue';
 
+import { resolveApiProxyTarget } from './src/lib/dev-proxy';
+
 export default defineConfig({
   plugins: [pluginVue()],
   html: {
@@ -15,7 +17,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: resolveApiProxyTarget(),
         changeOrigin: true
       }
     }

@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     )
 
     postgres_database_url: str
+    postgres_admin_url: str | None = None
+    default_tenant_id: str = "default"
+    tenant_auto_create_database: bool = True
+    tenant_database_name_prefix: str = "tenant_"
+    tenant_database_url_template: str | None = None
+    app_env: str = "development"
+    startup_schema_bootstrap: bool | None = None
 
     oss_region: str
     oss_bucket: str
@@ -37,9 +44,9 @@ class Settings(BaseSettings):
     assistant_retrieval_top_k: int = 6
     assistant_max_context_blocks: int = 4
     assistant_max_related_files: int = 5
-    assistant_enable_bm25: bool = False
+    assistant_enable_bm25: bool = True
     assistant_enable_rule_retrieval: bool = True
-    assistant_min_similarity_score: float = 0.45
+    assistant_min_similarity_score: float = 0.40
     assistant_min_final_score: float = 0.25
     assistant_vector_retrieval_top_k: int = 18
     assistant_bm25_retrieval_top_k: int = 18
@@ -56,6 +63,13 @@ class Settings(BaseSettings):
     assistant_llm_base_url: str | None = None
     assistant_llm_api_key: str | None = None
     assistant_llm_model: str | None = None
+    assistant_backend_base_url: str = "http://127.0.0.1:8000"
+    assistant_mcp_rag_url: str | None = None
+    assistant_mcp_memory_url: str | None = None
+    assistant_mcp_llm_gateway_url: str | None = None
+    assistant_mcp_business_tools_url: str | None = None
+    assistant_mcp_request_timeout_seconds: float = 20.0
+    assistant_mcp_llm_timeout_seconds: float = 120.0
     embedding_batch_size: int = 16
     embedding_request_timeout_seconds: float = 30.0
     embedding_max_retries: int = 2
@@ -86,6 +100,19 @@ class Settings(BaseSettings):
             )
 
         return tuple(value)  # type: ignore[arg-type]
+
+    @model_validator(mode="after")
+    def populate_assistant_mcp_urls(self) -> "Settings":
+        base_url = self.assistant_backend_base_url.rstrip("/")
+        if not self.assistant_mcp_rag_url:
+            self.assistant_mcp_rag_url = f"{base_url}/api/mcp/rag"
+        if not self.assistant_mcp_memory_url:
+            self.assistant_mcp_memory_url = f"{base_url}/api/mcp/memory"
+        if not self.assistant_mcp_llm_gateway_url:
+            self.assistant_mcp_llm_gateway_url = f"{base_url}/api/mcp/llm-gateway"
+        if not self.assistant_mcp_business_tools_url:
+            self.assistant_mcp_business_tools_url = f"{base_url}/api/mcp/business-tools"
+        return self
 
     @field_validator("assistant_min_similarity_score", "assistant_min_final_score", mode="after")
     @classmethod
@@ -119,6 +146,20 @@ class Settings(BaseSettings):
     def validate_embedding_timeout(cls, value: float) -> float:
         if value <= 0:
             raise ValueError("embedding timeout must be positive")
+        return value
+
+    @field_validator("assistant_mcp_request_timeout_seconds", mode="after")
+    @classmethod
+    def validate_mcp_timeout(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("assistant_mcp_request_timeout_seconds must be positive")
+        return value
+
+    @field_validator("assistant_mcp_llm_timeout_seconds", mode="after")
+    @classmethod
+    def validate_mcp_llm_timeout(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("assistant_mcp_llm_timeout_seconds must be positive")
         return value
 
     @field_validator("embedding_max_retries", mode="after")
@@ -185,6 +226,12 @@ class Settings(BaseSettings):
     @property
     def embedding_dimension(self) -> int | None:
         return self.doubao_embedding_dimension
+
+    @property
+    def should_bootstrap_schema(self) -> bool:
+        if self.startup_schema_bootstrap is not None:
+            return self.startup_schema_bootstrap
+        return self.app_env.lower() in {"dev", "development", "local", "test"}
 
 
 @lru_cache

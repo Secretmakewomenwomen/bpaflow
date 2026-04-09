@@ -1,5 +1,6 @@
 import { reactive } from 'vue';
 import type { AuthSuccessResponse, AuthUser } from '../types/auth';
+import { buildTenantHeaders, setCurrentTenantId } from './tenant';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
@@ -25,7 +26,16 @@ function readStoredUser() {
   }
 
   try {
-    return JSON.parse(raw) as AuthUser;
+    const parsed = JSON.parse(raw) as Partial<AuthUser>;
+    if (!parsed.user_id || !parsed.username) {
+      storage?.removeItem(USER_KEY);
+      return null;
+    }
+    return {
+      user_id: parsed.user_id,
+      username: parsed.username,
+      tenant_id: parsed.tenant_id ?? 'default'
+    };
   } catch {
     storage?.removeItem(USER_KEY);
     return null;
@@ -54,6 +64,7 @@ export function getCurrentUser() {
 
 export function saveAuth(payload: AuthSuccessResponse) {
   const storage = getStorage();
+  setCurrentTenantId(payload.user.tenant_id);
   authState.token = payload.access_token;
   authState.user = payload.user;
   storage?.setItem(TOKEN_KEY, payload.access_token);
@@ -79,9 +90,9 @@ async function parseAuthResponse(response: Response) {
 export async function login(username: string, password: string) {
   const response = await fetch(`${authApiBase}/login`, {
     method: 'POST',
-    headers: {
+    headers: buildTenantHeaders({
       'Content-Type': 'application/json'
-    },
+    }),
     body: JSON.stringify({ username, password })
   });
   const payload = await parseAuthResponse(response);
@@ -92,9 +103,9 @@ export async function login(username: string, password: string) {
 export async function register(username: string, password: string) {
   const response = await fetch(`${authApiBase}/register`, {
     method: 'POST',
-    headers: {
+    headers: buildTenantHeaders({
       'Content-Type': 'application/json'
-    },
+    }),
     body: JSON.stringify({ username, password })
   });
   const payload = await parseAuthResponse(response);
@@ -115,9 +126,9 @@ export async function restoreAuthState() {
 
   restorePromise = (async () => {
     const response = await fetch(`${authApiBase}/me`, {
-      headers: {
+      headers: buildTenantHeaders({
         Authorization: `Bearer ${authState.token}`
-      }
+      })
     });
 
     if (!response.ok) {
@@ -126,6 +137,7 @@ export async function restoreAuthState() {
     }
 
     const user = (await response.json()) as AuthUser;
+    setCurrentTenantId(user.tenant_id);
     authState.user = user;
     getStorage()?.setItem(USER_KEY, JSON.stringify(user));
     return user;

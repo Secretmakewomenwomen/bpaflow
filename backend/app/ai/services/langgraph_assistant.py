@@ -74,31 +74,39 @@ class LangGraphAssistantService:
         self,
         settings: Settings,
         conversation_service: AiConversationService,
+        tenant_id: str | None = None,
         rag_service: AIRagService | None = None,
         upload_service: UploadService | None = None,
         work_service: WorkService | None = None,
         flow_chart_interrupt_service: FlowChartInterruptService | None = None,
         openai_client: OpenAI | None = None,
+        mcp_client: Any | None = None,
         checkpointer_factory: Any | None = None,
+        checkpointer_dsn: str | None = None,
     ) -> None:
         """初始化 LangGraph 助手服务，注入会话、RAG、工具服务和可选的 OpenAI 客户端。"""
         self.settings = settings
         self.conversation_service = conversation_service
+        self.tenant_id = tenant_id
         self.rag_service = rag_service or AIRagService(settings)
         self.upload_service = upload_service
         self.work_service = work_service
         self.flow_chart_interrupt_service = flow_chart_interrupt_service or self._build_flow_chart_interrupt_service()
         self._openai_client = openai_client
+        self._mcp_client = mcp_client
         self._checkpointer_factory = checkpointer_factory
+        self._checkpointer_dsn = checkpointer_dsn or settings.postgres_database_url
         self._facade = AgentFacade(
             settings=settings,
             conversation_service=self.conversation_service,
+            tenant_id=self.tenant_id,
             rag_service=self.rag_service,
             upload_service=self.upload_service,
             work_service=self.work_service,
             flow_chart_interrupt_service=self.flow_chart_interrupt_service,
             openai_client=self._openai_client,
             openai_client_factory=self._get_openai_client,
+            mcp_client=self._mcp_client,
         )
 
     def _build_flow_chart_interrupt_service(self) -> FlowChartInterruptService | None:
@@ -123,10 +131,19 @@ class LangGraphAssistantService:
         # Tests sometimes mutate service dependencies (e.g. rag_service) after init; keep facade aligned.
         self._facade.settings = self.settings
         self._facade.conversation_service = self.conversation_service
+        self._facade.tenant_id = self.tenant_id
         self._facade.rag_service = self.rag_service
         self._facade.upload_service = self.upload_service
         self._facade.work_service = self.work_service
         self._facade.flow_chart_interrupt_service = self.flow_chart_interrupt_service
+        self._facade._mcp_client = self._mcp_client
+        if self._mcp_client is not None:
+            if hasattr(self._mcp_client, "rag_service"):
+                self._mcp_client.rag_service = self.rag_service
+            if hasattr(self._mcp_client, "upload_service"):
+                self._mcp_client.upload_service = self.upload_service
+            if hasattr(self._mcp_client, "work_service"):
+                self._mcp_client.work_service = self.work_service
 
     def _create_graph_definition(self):
         """定义当前助手使用的状态图节点与路由关系。"""
@@ -175,7 +192,7 @@ class LangGraphAssistantService:
         """创建 checkpoint 上下文；测试环境可注入自定义工厂，生产默认使用 PostgresSaver。"""
         if self._checkpointer_factory is not None:
             return self._checkpointer_factory()
-        return _get_postgres_saver_class().from_conn_string(self.settings.postgres_database_url)
+        return _get_postgres_saver_class().from_conn_string(self._checkpointer_dsn)
 
     def _load_history_node(self, state: AiAssistantState) -> AiAssistantState:
         """图节点：加载当前会话最近几轮历史消息，供后续摘要和对话生成使用。"""
@@ -644,9 +661,8 @@ class LangGraphAssistantService:
         }
 
 
-def initialize_postgres_checkpointer(settings: Settings) -> None:
-    """初始化 LangGraph 所需的 Postgres checkpoint 表结构，只执行一次。"""
-    dsn = settings.postgres_database_url
+def initialize_postgres_checkpointer_for_dsn(dsn: str) -> None:
+    """初始化指定 DSN 的 LangGraph checkpoint 表结构，只执行一次。"""
     if dsn in _INITIALIZED_CHECKPOINTER_DSNS:
         return
 
@@ -658,3 +674,8 @@ def initialize_postgres_checkpointer(settings: Settings) -> None:
             checkpointer.setup()
 
         _INITIALIZED_CHECKPOINTER_DSNS.add(dsn)
+
+
+def initialize_postgres_checkpointer(settings: Settings) -> None:
+    """初始化默认租户使用的 LangGraph checkpoint 表结构。"""
+    initialize_postgres_checkpointer_for_dsn(settings.postgres_database_url)

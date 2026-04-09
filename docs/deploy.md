@@ -54,6 +54,19 @@ ASSISTANT_BM25_RETRIEVAL_TOP_K=18
 ASSISTANT_RULE_RETRIEVAL_TOP_K=12
 ```
 
+如果部署了 AI 助手 MCP 能力，推荐显式配置后端内部访问地址：
+
+```env
+ASSISTANT_BACKEND_BASE_URL=http://backend:8000
+```
+
+说明：
+
+- 单机部署可继续使用 `http://127.0.0.1:8000`
+- Docker Compose 推荐使用服务名，例如 `http://backend:8000`
+- Kubernetes 推荐使用 Service 地址
+- 只有在必须经过外部网关时，才建议把 `ASSISTANT_MCP_*_URL` 单独配置成公网地址
+
 ## 2. Docker 部署
 
 项目内已提供：
@@ -245,5 +258,11 @@ curl http://127.0.0.1:8000/health
 - 前端服务
 
 因为当前项目代码已经按外部服务地址连接这些资源。
+
+### 5.3 关于 127.0.0.1 硬编码
+
+- 前端线上请求应继续使用相对路径 `/api`
+- `rsbuild` 中的代理地址只用于本地开发，可通过 `VITE_API_PROXY_TARGET` 覆盖
+- 后端内部 MCP 地址不要写死到业务代码里，应通过 `ASSISTANT_BACKEND_BASE_URL` 或 `ASSISTANT_MCP_*_URL` 配置
 
 如果后续要把前端、PostgreSQL、pgvector 一起编排进 `docker-compose`，可以再单独补完整的多服务部署文件。

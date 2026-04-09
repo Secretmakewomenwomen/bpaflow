@@ -11,6 +11,7 @@ const props = defineProps<{
   aiAssistantOpen?: boolean;
   user?: {
     username: string;
+    tenant_id?: string;
   } | null;
 }>();
 
@@ -61,6 +62,10 @@ const saveStatus = computed(() => props.saveStatusText || '尚未保存');
       <div v-if="props.user" class="header-stat">
         <span class="header-stat__label">当前用户</span>
         <strong>{{ props.user.username }}</strong>
+      </div>
+      <div v-if="props.user" class="header-stat">
+        <span class="header-stat__label">当前租户</span>
+        <strong>{{ props.user.tenant_id || 'default' }}</strong>
       </div>
       <div class="header-stat">
         <span class="header-stat__label">工作区</span>

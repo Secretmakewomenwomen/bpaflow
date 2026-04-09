@@ -4,22 +4,36 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Response, UploadFile, s
 from fastapi.responses import RedirectResponse
 
 from app.core.config import Settings, get_settings
-from app.core.database import get_db
+from app.core.database import get_db, get_tenant_engine, get_tenant_id, get_tenant_session_local
 from app.dependencies.auth import get_current_user
 from app.schemas.auth import CurrentUserResponse
 from app.schemas.flow import ChapterPhaseParseResponse
 from app.schemas.upload import UploadResponse
 from app.services.chapter_flow_service import ChapterFlowService
+from app.services.pgvector_service import PgVectorService
 from app.services.upload_service import UploadService
+from app.services.vectorization_service import VectorizationService
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 
 def get_upload_service(
     db=Depends(get_db),
+    tenant_id: str = Depends(get_tenant_id),
     settings: Settings = Depends(get_settings),
 ) -> UploadService:
-    return UploadService(db=db, settings=settings)
+    return UploadService(
+        db=db,
+        settings=settings,
+        vectorization_service=VectorizationService(
+            settings=settings,
+            pgvector_service=PgVectorService(
+                settings=settings,
+                engine=get_tenant_engine(tenant_id),
+            ),
+            session_factory=lambda: get_tenant_session_local(tenant_id)(),
+        ),
+    )
 
 
 def get_chapter_flow_service(

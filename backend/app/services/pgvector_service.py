@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import UTC, datetime
 import math
@@ -9,6 +10,8 @@ from sqlalchemy import text
 from app.core.config import Settings
 from app.core.database import ensure_vector_store_schema, get_engine
 
+logger = logging.getLogger(__name__)
+
 
 class PgVectorService:
     _MAX_TOP_K = 1000
@@ -16,6 +19,7 @@ class PgVectorService:
     def __init__(self, settings: Settings, engine=None) -> None:
         self.settings = settings
         self.engine = engine or get_engine()
+        self._bm25_backend_cache: str | None = None
 
     def _validate_top_k(self, top_k: int) -> None:
         if top_k <= 0 or top_k > self._MAX_TOP_K:
@@ -115,6 +119,16 @@ class PgVectorService:
         top_k: int,
     ) -> list[dict]:
         self._validate_top_k(top_k)
+        if not query_text.strip():
+            return []
+
+        if self._resolve_bm25_backend() == "pg_textsearch":
+            return self._search_text_chunks_via_pg_textsearch(
+                user_id=user_id,
+                query_text=query_text,
+                top_k=top_k,
+            )
+
         table_name = self._validated_identifier(self.settings.pgvector_text_table)
 
         # 中文说明：BM25 仍然复用现有 chunk 表，不单独维护搜索副本。
@@ -144,9 +158,108 @@ class PgVectorService:
                 -- 中文说明：chunk 文本是主召回字段，文件名额外 boost 2 倍，
                 -- 这样术语、缩写、接口名、文件标题类查询会更稳。
                 vectors.small_chunk_text ||| :query
-                OR vectors.file_name ||| :query::pdb.boost(2)
+                OR vectors.file_name ||| (:query)::pdb.boost(2)
               )
             ORDER BY pdb.score(vectors.id) DESC, uf.id DESC, vectors.small_chunk_index ASC
+            LIMIT :top_k
+            """
+        )
+        params = {
+            "user_id": user_id,
+            "query": query_text,
+            "top_k": top_k,
+        }
+
+        with self.engine.begin() as connection:
+            result = connection.execute(sql, params)
+            return [dict(item) for item in result.mappings().all()]
+
+    def _resolve_bm25_backend(self) -> str:
+        if self._bm25_backend_cache is not None:
+            return self._bm25_backend_cache
+
+        # 单测 fake engine 没有 connect 能力时，默认走 pg_search 路径保留原测试行为。
+        if not hasattr(self.engine, "connect"):
+            self._bm25_backend_cache = "pg_search"
+            return self._bm25_backend_cache
+
+        try:
+            with self.engine.connect() as connection:
+                row = connection.execute(
+                    text(
+                        """
+                        SELECT
+                          EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'pg_search') AS has_pg_search,
+                          EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = 'pdb') AS has_pdb
+                        """
+                    )
+                ).mappings().one()
+            has_pg_search = bool(row.get("has_pg_search"))
+            has_pdb = bool(row.get("has_pdb"))
+            if has_pg_search and has_pdb:
+                self._bm25_backend_cache = "pg_search"
+            else:
+                self._bm25_backend_cache = "pg_textsearch"
+                logger.warning(
+                    "pg_search/pdb is not fully available, fallback to PostgreSQL text search bm25-like retrieval"
+                )
+        except Exception:
+            self._bm25_backend_cache = "pg_textsearch"
+            logger.exception("failed to detect pg_search availability, fallback to pg_textsearch")
+
+        return self._bm25_backend_cache
+
+    def _search_text_chunks_via_pg_textsearch(
+        self,
+        *,
+        user_id: str,
+        query_text: str,
+        top_k: int,
+    ) -> list[dict]:
+        table_name = self._validated_identifier(self.settings.pgvector_text_table)
+        sql = text(
+            f"""
+            WITH candidates AS (
+              SELECT
+                vectors.file_id AS file_id,
+                uf.id AS upload_id,
+                vectors.file_name AS file_name,
+                vectors.mime_type AS mime_type,
+                uf.created_at AS created_at,
+                uf.public_url AS download_url,
+                vectors.small_chunk_text AS small_chunk_text,
+                vectors.large_chunk_text AS large_chunk_text,
+                vectors.page_start AS page_start,
+                vectors.page_end AS page_end,
+                vectors.small_chunk_index AS small_chunk_index,
+                (
+                  setweight(to_tsvector('simple', COALESCE(vectors.file_name, '')), 'A')
+                  ||
+                  setweight(to_tsvector('simple', COALESCE(vectors.small_chunk_text, '')), 'B')
+                ) AS ts_doc
+              FROM {table_name} AS vectors
+              JOIN uploaded_file AS uf ON uf.id = vectors.file_id
+              WHERE uf.user_id = :user_id
+                AND uf.text_vector_status = 'VECTORIZED'
+            )
+            SELECT
+              candidates.file_id AS file_id,
+              candidates.upload_id AS upload_id,
+              candidates.file_name AS file_name,
+              candidates.mime_type AS mime_type,
+              candidates.created_at AS created_at,
+              candidates.download_url AS download_url,
+              candidates.small_chunk_text AS small_chunk_text,
+              candidates.large_chunk_text AS large_chunk_text,
+              candidates.page_start AS page_start,
+              candidates.page_end AS page_end,
+              candidates.small_chunk_index AS small_chunk_index,
+              NULL::double precision AS distance,
+              ts_rank_cd(candidates.ts_doc, websearch_to_tsquery('simple', :query)) AS bm25_score,
+              NULL::double precision AS rule_score
+            FROM candidates
+            WHERE candidates.ts_doc @@ websearch_to_tsquery('simple', :query)
+            ORDER BY bm25_score DESC, candidates.upload_id DESC, candidates.small_chunk_index ASC
             LIMIT :top_k
             """
         )

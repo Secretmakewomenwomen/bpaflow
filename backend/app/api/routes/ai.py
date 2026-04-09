@@ -7,9 +7,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.database import get_db
+from app.core.database import get_db, get_tenant_database_url, get_tenant_engine, get_tenant_id
 from app.dependencies.auth import get_current_user
 from app.ai.services.ai_conversation_service import AiConversationService
+from app.ai.services.ai_rag_service import AIRagService
 from app.ai.services.langgraph_assistant import LangGraphAssistantService
 from app.schemas.ai import (
     ConversationCreateResponse,
@@ -18,6 +19,7 @@ from app.schemas.ai import (
     SendConversationMessageRequest,
 )
 from app.schemas.auth import CurrentUserResponse
+from app.services.pgvector_service import PgVectorService
 from app.services.upload_service import UploadService
 from app.services.work_service import WorkService
 
@@ -36,12 +38,24 @@ def get_ai_conversation_service(db: Annotated[Session, Depends(get_db)]) -> AiCo
 def get_ai_assistant_service(
     settings: Annotated[Settings, Depends(get_settings)],
     db: Annotated[Session, Depends(get_db)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
 ) -> LangGraphAssistantService:
+    tenant_engine = get_tenant_engine(tenant_id)
+    tenant_database_url = get_tenant_database_url(tenant_id)
     return LangGraphAssistantService(
         settings=settings,
         conversation_service=AiConversationService(db=db),
+        tenant_id=tenant_id,
+        rag_service=AIRagService(
+            settings=settings,
+            pgvector_service=PgVectorService(
+                settings=settings,
+                engine=tenant_engine,
+            ),
+        ),
         upload_service=UploadService(db=db, settings=settings),
         work_service=WorkService(db=db),
+        checkpointer_dsn=tenant_database_url,
     )
 
 

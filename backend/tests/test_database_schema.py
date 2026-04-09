@@ -3,6 +3,8 @@ from app.core.database import (
     create_tables,
     ensure_ai_agent_trace_schema,
     ensure_ai_message_schema,
+    ensure_pg_search_bm25_index,
+    ensure_pg_search_extension,
     ensure_pgvector_extension,
     ensure_pg_search_ready,
     ensure_worker_file_schema,
@@ -76,6 +78,34 @@ def test_ensure_pgvector_extension_creates_vector_extension() -> None:
     ensure_pgvector_extension(engine)
 
     assert engine.connection.statements == ["CREATE EXTENSION IF NOT EXISTS vector"]
+
+
+def test_ensure_pg_search_extension_creates_pg_search_extension() -> None:
+    engine = FakeEngine()
+
+    ensure_pg_search_extension(engine)
+
+    assert engine.connection.statements == ["CREATE EXTENSION IF NOT EXISTS pg_search"]
+
+
+def test_ensure_pg_search_bm25_index_creates_expected_index_sql(monkeypatch) -> None:
+    engine = FakeEngine()
+
+    class FakeSettings:
+        pgvector_text_table = "uploaded_file_text_vector"
+
+    monkeypatch.setattr("app.core.config.get_settings", lambda: FakeSettings())
+
+    ensure_pg_search_bm25_index(engine)
+
+    assert engine.connection.statements == [
+        (
+            "CREATE INDEX IF NOT EXISTS idx_uploaded_file_text_vector_bm25 "
+            "ON uploaded_file_text_vector USING bm25 "
+            "(id, file_id, file_name, small_chunk_index, created_at, small_chunk_text) "
+            "WITH (key_field = 'id')"
+        )
+    ]
 
 
 def test_ensure_uploaded_file_schema_adds_missing_vector_columns() -> None:

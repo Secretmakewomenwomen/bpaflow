@@ -1,4 +1,5 @@
 import { clearAuth, getToken } from './auth';
+import { getCurrentTenantId } from './tenant';
 
 export async function apiFetch(input: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
@@ -7,6 +8,7 @@ export async function apiFetch(input: string, init: RequestInit = {}) {
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
+  headers.set('X-Tenant-Id', getCurrentTenantId());
 
   if (!(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');

@@ -250,9 +250,29 @@ def test_pgvector_service_builds_bm25_query_against_dynamic_text_table() -> None
     assert "NULL::double precision AS rule_score" in sql
     assert "pdb.score(vectors.id) AS bm25_score" in sql
     assert "vectors.small_chunk_text ||| :query" in sql
-    assert "vectors.file_name ||| :query::pdb.boost(2)" in sql
-    assert "OR vectors.file_name ||| :query::pdb.boost(2)" in sql
+    assert "vectors.file_name ||| (:query)::pdb.boost(2)" in sql
+    assert "OR vectors.file_name ||| (:query)::pdb.boost(2)" in sql
     assert "ORDER BY pdb.score(vectors.id) DESC, uf.id DESC, vectors.small_chunk_index ASC" in sql
+
+
+def test_pgvector_service_falls_back_to_pg_textsearch_query_when_pg_search_unavailable(monkeypatch) -> None:
+    service, engine = build_service()
+    engine.connection.result = FakeResult([])
+    monkeypatch.setattr(service, "_resolve_bm25_backend", lambda: "pg_textsearch")
+
+    service.search_text_bm25_chunks(
+        user_id="u-1",
+        query_text="claim policy",
+        top_k=5,
+    )
+
+    sql = engine.connection.calls[0][0]
+    assert "WITH candidates AS" in sql
+    assert "websearch_to_tsquery('simple', :query)" in sql
+    assert "ts_rank_cd(candidates.ts_doc, websearch_to_tsquery('simple', :query)) AS bm25_score" in sql
+    assert "setweight(to_tsvector('simple', COALESCE(vectors.file_name, '')), 'A')" in sql
+    assert "setweight(to_tsvector('simple', COALESCE(vectors.small_chunk_text, '')), 'B')" in sql
+    assert "WHERE candidates.ts_doc @@ websearch_to_tsquery('simple', :query)" in sql
 
 
 def test_pgvector_service_builds_file_name_rule_query() -> None:

@@ -1,65 +1,21 @@
-# Findings & Decisions
+# Findings
 
-## Confirmed User Requirements
-- Need two detailed documents.
-- Document A is an internal architecture document focused on the current ReAct AI service.
-- Document B is an interview/presentation document focused on the AI service from 0 to 1.
-- Both documents should be written from an architect's perspective.
-- Both documents should include future evolution analysis.
-- Both documents should include diagram-oriented content.
-
-## Current ReAct Agent Evidence
-- API entrypoint for the new agent service is in `backend/app/api/routes/agent.py`.
-- `AgentFacade` in `backend/app/ai/agent/facade.py` is the orchestration entry that assembles reasoning, tools, guardrails, memory, termination, tracer, and the current ReAct runtime.
-- The current runtime implementation is `LangGraphAgentRuntime`; `LoopAgentRuntime` has been removed from the active code path.
-- `ReasoningEngine` in `backend/app/ai/agent/reasoning/engine.py` supports:
-  - OpenAI tool-call parsing
-  - Legacy text ReAct parsing (`Thought/Action/Final Answer` style)
-  - Final-answer fallback for plain text responses
-- Tool protocol is centralized in `backend/app/ai/agent/tools/registry.py` and executed by `backend/app/ai/agent/tools/dispatcher.py`.
-- Runtime state is modeled in `backend/app/ai/agent/state/models.py` and managed by `backend/app/ai/agent/state/manager.py`.
-- Safety boundaries are separated into:
-  - `backend/app/ai/agent/guardrails/policy.py`
-  - `backend/app/ai/agent/termination/controller.py`
-- Step-level observability is handled by `backend/app/ai/agent/tracing/tracer.py`, with persistence into `AiAgentTrace`.
-
-## Legacy / Transitional Architecture Evidence
-- The previous architecture direction is documented in `docs/superpowers/specs/2026-04-01-ai-assistant-tool-calling-design.md`.
-- The current standardized ReAct platform direction is documented in `docs/superpowers/specs/2026-04-03-react-agent-design.md`.
-- `backend/app/ai/services/langgraph_assistant.py` shows the transitional state:
-  - LangGraph still provides the graph/checkpoint/stream shell.
-  - The core agent loop is already delegated to `AgentFacade`.
-  - The graph has been simplified to `load_history -> run_agent_loop -> build_response -> persist_message`.
-- This means the project is no longer in the original rule-driven tool-routing mode, but it is also not yet a fully independent pure runtime platform.
-
-## Data & Storage Findings
-- Business conversation persistence remains in:
-  - `AiConversation`
-  - `AiMessage`
-  - `AiMessageReference`
-- Runtime observability persistence is separated into `AiAgentTrace`.
-- This separation supports a strong documentation point: user-visible business messages and internal runtime traces are stored independently.
-
-## RAG / Database Findings
-- Retrieval is implemented in `backend/app/ai/services/ai_rag_service.py`.
-- Retrieval strategy is multi-route:
-  - vector retrieval
-  - BM25 retrieval
-  - deterministic rule-based retrieval
-- Vector and lexical retrieval both reuse PostgreSQL-based storage through `backend/app/services/pgvector_service.py`.
-- `backend/sql/004_add_pg_search_bm25.sql` shows the project uses PostgreSQL `pg_search` BM25 indexing.
-- `backend/sql/003_add_dual_channel_vector_fields.sql` shows file-level vectorization lifecycle state is stored directly on `uploaded_file`.
-- Database choice is therefore not “a separate vector DB”, but “PostgreSQL as the unified transactional + vector + lexical retrieval store”.
-
-## Architecture Narrative Candidates
-- The strongest narrative is not “we replaced tool-calling with ReAct completely”.
-- The stronger and more accurate narrative is:
-  - Stage 1: rule-driven intent + tool routing
-  - Stage 2: model-driven tool-calling loop
-  - Stage 3: standardized ReAct runtime abstraction with decoupled reasoning/state/tool/safety/tracing
-  - Stage 4: future optional evolution to planner-executor, multi-agent, longer-term memory, and dynamic tooling
-
-## Risks / Accuracy Constraints
-- Need to distinguish “implemented now” from “architectural target”.
-- Need to avoid claiming that LangGraph has been fully removed; current code shows it is still part of one runtime backend and stream/checkpoint shell.
-- Need to describe the current runtime accurately: LangGraph still exists as the execution shell, but the old standalone `loop` runtime no longer exists in the active implementation.
+- 入口路由：`POST /api/ai/conversations/{conversation_id}/messages/stream` 位于 `backend/app/api/routes/ai.py`，先通过 `AiConversationService.create_user_message` 持久化用户消息，再在生成器中调用 `LangGraphAssistantService.stream_invoke`，将内部事件包装为 SSE。
+- `backend/app/main.py` 在启动时初始化 `AgentEventStream`、数据库 schema 和 LangGraph checkpointer；AI 路由挂载在 `/api/ai`。
+- `AiConversationService` 负责会话和消息落库，assistant 消息会保存 `tool_trace`、`pending_action`、`artifact`、`actions` 等结构化 payload；`reasoning_trace` 明确标注为 runtime-only，不持久化。
+- `AgentEventStream` 是内存态线程事件历史缓存，按 `thread_id` 保存最近 50 条 `AgentEvent`，用于订阅/回放，不是 stream 接口的主传输通道。
+- `LangGraphAssistantService` 是 stream 主编排层：定义 4 个节点 `load_history -> run_agent_loop -> build_response -> persist_message`，并通过 LangGraph checkpointer 以 `conversation_id` 作为 `thread_id` 保持可恢复执行。
+- `AgentFacade.stream_invoke` 先发 `assistant_start`，再消费 graph 的 `custom` 和 `updates` 两类流：`custom` 用于中间 SSE 事件，`updates` 用于拿到最终 `assistant_message` 或 interrupt 值。
+- 真正的 ReAct/runtime 执行在 `LangGraphAgentRuntime.run`：先构造 prompt messages，再循环调用 `ReasoningEngine.decide()`，根据 `DecisionType` 在 `final_answer`、`tool_call`、`tool_arguments_error` 等分支之间流转。
+- `ReasoningEngine` 同时兼容两套范式：优先解析 OpenAI `tool_calls`；若无 tool_calls，再回退解析 legacy text ReAct（`Thought/Action/Final Answer`）。这说明当前实现是“tool-calling 优先，文本 ReAct 兼容兜底”。
+- `ToolDispatcher` 不直接执行业务逻辑，而是把工具统一转发到 MCP 服务端（rag/memory/llm_gateway/business_tools），并自动附加 `x-user-id`、`x-tenant-id`、`x-session-id`、`x-trace-id` 等上下文。
+- `LangGraphAgentRuntime` 的消息循环是真正的 ReAct 执行器：每轮都把 assistant 的 decision 和后续 tool observation 追加到 `messages`，下一轮模型看到的是完整“Thought/Action/Observation”上下文。
+- Runtime 会把动作和观察分别转成 `assistant_reasoning` 事件中的 `action` / `observation` step，同时把真实的 tool I/O 以 `assistant_debug` 暴露给流式前端。
+- 工具错误有一套明确的自纠策略：`INVALID_ARGUMENT` 可重试一次；非 retryable 错误或二次失败直接终止并返回“工具调用失败”。
+- `search_knowledge_base` 是一个特殊工具：其返回值会被提升为 `retrieval_response`，最终回答若成功收敛，会把 intent 定为 `rag_retrieval`，并携带 snippets / related_files / references。普通对话则落为 `general_chat`。
+- PromptBuilder 的系统规则对检索行为有很强约束，尤其限制重复检索、单文件过度深挖，以及要求多主题问题先做候选汇总。
+- `McpLlmProxyClient` 把 runtime 期望的 OpenAI `chat.completions.create` 调用，转成一次 MCP `tools/call` JSON-RPC 请求，目标是 `/api/mcp/llm-gateway`。因此模型能力在架构上也被包装成 MCP server。
+- `/api/mcp/llm-gateway` 对外暴露两个 tool：`chat_completion` 和 `stream_completion`；底层 `LlmGatewayService` 再真正调用 OpenAI-compatible 上游。当前 runtime 决策路径主要使用 `chat_completion`，而不是直接消费上游 token stream。
+- `/api/mcp/rag` 提供 `search_knowledge_base`，要求 `x-user-id`；`/api/mcp/business-tools` 提供 `query_users`、`list_recent_files`、`get_file_detail`；`/api/mcp/memory` 提供 session 级 memory 读写汇总。
+- `AgentStateManager` 管理 session/step/tool_call/tool_observation 四层状态，用于终止判定和 trace；`TerminationController` 用步数、重复动作、连续空步三类规则约束 agent 死循环。
+- 交付物：`docs/backend-ai-stream-architecture.md`，内容覆盖 stream 主链路、LangGraph 编排、ReAct 实现、MCP 分层、RAG 接入、状态与 trace。

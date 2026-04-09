@@ -1,0 +1,12 @@
+.tenant-page {
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.tenant-card {
+  border-radius: 12px;
+}
+
+.tenant-alert {
+  margin-bottom: 12px;
+}

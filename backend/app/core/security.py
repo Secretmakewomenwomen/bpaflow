@@ -38,11 +38,18 @@ def verify_password(password: str, password_hash: str) -> bool:
     return hmac.compare_digest(actual_hash, expected_hash)
 
 
-def create_access_token(*, user_id: str, username: str, settings: Settings) -> str:
+def create_access_token(
+    *,
+    user_id: str,
+    username: str,
+    settings: Settings,
+    tenant_id: str = "default",
+) -> str:
     expires_at = datetime.now(UTC) + timedelta(minutes=settings.jwt_access_token_expire_minutes)
     payload = {
         "sub": user_id,
         "username": username,
+        "tenant_id": tenant_id,
         "exp": int(expires_at.timestamp()),
     }
     return encode_jwt(payload, settings.jwt_secret_key)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -15,6 +16,40 @@ from app.services.pgvector_service import PgVectorService
 
 _TOKEN_PATTERN = re.compile(r"[a-z0-9_\-]+|[\u4e00-\u9fff]+", re.IGNORECASE)
 _IDENTIFIER_PATTERN = re.compile(r"[a-z0-9_\-]+", re.IGNORECASE)
+_PURE_CJK_PATTERN = re.compile(r"^[\u4e00-\u9fff]+$")
+_CJK_EDGE_NOISE = "的了呢吗吧啊呀嘛哈哦哇喔"
+_CJK_SPLIT_MARKERS = (
+    "怎么办",
+    "怎么样",
+    "怎么",
+    "如何",
+    "怎样",
+    "咋办",
+    "请问",
+    "帮我",
+    "我该",
+    "我想",
+    "我要",
+    "我的",
+    "一下子",
+    "一下",
+)
+_CJK_STOPWORDS = {
+    "请问",
+    "帮我",
+    "我的",
+    "我该",
+    "我想",
+    "我要",
+    "怎么",
+    "如何",
+    "怎样",
+    "咋办",
+    "怎么办",
+    "怎么样",
+    "一下",
+    "一下子",
+}
 _RECENT_INDICATORS = {
     "最近",
     "最新",
@@ -94,7 +129,73 @@ def _tokenize_query(text: str) -> list[str]:
 
 
 def _extract_keywords(tokens: list[str]) -> list[str]:
-    return [token for token in tokens if len(token) >= 2]
+    keywords: list[str] = []
+    seen: set[str] = set()
+
+    def add_keyword(keyword: str) -> None:
+        normalized = keyword.strip().lower()
+        if len(normalized) < 2:
+            return
+        if normalized in _CJK_STOPWORDS:
+            return
+        if normalized in seen:
+            return
+        seen.add(normalized)
+        keywords.append(normalized)
+
+    for token in tokens:
+        add_keyword(token)
+        for expanded in _expand_cjk_keywords(token):
+            add_keyword(expanded)
+
+    return keywords
+
+
+def _trim_cjk_segment(segment: str) -> str:
+    trimmed = segment.strip()
+    while trimmed and trimmed[0] in _CJK_EDGE_NOISE:
+        trimmed = trimmed[1:]
+    while trimmed and trimmed[-1] in _CJK_EDGE_NOISE:
+        trimmed = trimmed[:-1]
+    return trimmed
+
+
+def _expand_cjk_keywords(token: str) -> list[str]:
+    normalized = token.strip()
+    if len(normalized) < 4:
+        return []
+    if not _PURE_CJK_PATTERN.fullmatch(normalized):
+        return []
+
+    expanded: list[str] = []
+    seen: set[str] = set()
+
+    def add(term: str) -> None:
+        normalized_term = _trim_cjk_segment(term)
+        if len(normalized_term) < 2:
+            return
+        if normalized_term in _CJK_STOPWORDS:
+            return
+        if normalized_term in seen:
+            return
+        seen.add(normalized_term)
+        expanded.append(normalized_term)
+
+    split_text = normalized
+    for marker in _CJK_SPLIT_MARKERS:
+        split_text = split_text.replace(marker, " ")
+    for part in split_text.split():
+        cleaned = _trim_cjk_segment(part)
+        if len(cleaned) < 2:
+            continue
+        add(cleaned)
+        if len(cleaned) >= 4:
+            add(cleaned[:2])
+            add(cleaned[-2:])
+
+    add(normalized[:2])
+    add(normalized[-2:])
+    return expanded
 
 
 def _extract_identifier_tokens(tokens: list[str]) -> list[str]:
@@ -606,7 +707,7 @@ class AIRagService:
                 + rule_weight * candidate.rule_score
             )
             bonus = self._compute_bonus(candidate, features)
-            candidate.final_score = base + bonus
+            candidate.final_score = self._clamp_unit_score(base + bonus)
 
         candidates.sort(
             key=lambda item: (
@@ -615,6 +716,12 @@ class AIRagService:
             )
         )
         return candidates
+
+    @staticmethod
+    def _clamp_unit_score(value: float) -> float:
+        if not math.isfinite(value):
+            return 0.0
+        return max(0.0, min(1.0, float(value)))
 
     def _compute_bonus(self, candidate: RetrievedCandidate, features: QueryFeatures) -> float:
         total = 0.0

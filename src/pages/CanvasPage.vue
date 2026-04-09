@@ -57,7 +57,9 @@ const activeCanvasNode = computed(
 );
 
 function getActiveNodeStorageKey() {
-  return `${ACTIVE_CANVAS_NODE_KEY}:${authState.user?.user_id ?? 'anonymous'}`;
+  const userId = authState.user?.user_id ?? 'anonymous';
+  const tenantId = authState.user?.tenant_id ?? 'default';
+  return `${ACTIVE_CANVAS_NODE_KEY}:${tenantId}:${userId}`;
 }
 
 function readStoredActiveNodeId() {

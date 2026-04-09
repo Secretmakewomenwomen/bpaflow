@@ -16,6 +16,7 @@ class CurrentUserResponse(BaseModel):
 
     user_id: str
     username: str
+    tenant_id: str = "default"
 
 
 class AuthResponse(BaseModel):

@@ -11,3 +11,4 @@ backend/tests
 .corepack-cache-2
 .corepack-cache
 **/**/__pycache__
+

@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.database import get_db
+from app.core.database import get_db, get_tenant_id
 from app.core.security import decode_access_token
 from app.models.user import User
 from app.schemas.auth import CurrentUserResponse
@@ -14,6 +14,7 @@ from app.schemas.auth import CurrentUserResponse
 def get_current_user(
     authorization: Annotated[str | None, Header()] = None,
     db: Annotated[Session, Depends(get_db)] = None,
+    tenant_id: Annotated[str, Depends(get_tenant_id)] = "default",
     settings: Annotated[Settings, Depends(get_settings)] = None,
 ) -> CurrentUserResponse:
     if not authorization or not authorization.startswith("Bearer "):
@@ -30,6 +31,12 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的登录状态。",
         )
+    token_tenant_id = payload.get("tenant_id")
+    if token_tenant_id and token_tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="租户与登录态不匹配。",
+        )
 
     user = db.scalar(select(User).where(User.user_id == user_id))
     if user is None:
@@ -38,4 +45,8 @@ def get_current_user(
             detail="用户不存在。",
         )
 
-    return CurrentUserResponse(user_id=user.user_id, username=user.username)
+    return CurrentUserResponse(
+        user_id=user.user_id,
+        username=user.username,
+        tenant_id=token_tenant_id or tenant_id,
+    )

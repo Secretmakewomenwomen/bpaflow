@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterable, Mapping
+from types import SimpleNamespace
 from typing import Any, Callable
 
 from app.ai.agent.guardrails.policy import GuardrailsPolicy
@@ -87,10 +88,20 @@ def _extract_text_parts(content: Any) -> str:
 class _DecisionClientProxy:
     """Proxy client that forces ReasoningEngine.decide() to use the runtime's message list."""
 
-    def __init__(self, *, base_client: Any, get_messages: Callable[[], list[dict[str, Any]]]) -> None:
+    def __init__(
+        self,
+        *,
+        base_client: Any,
+        get_messages: Callable[[], list[dict[str, Any]]],
+        stream: bool = False,
+        emit_text_delta: Callable[[str], None] | None = None,
+    ) -> None:
         self._base = base_client
         self._get_messages = get_messages
+        self._stream = stream
+        self._emit_text_delta = emit_text_delta
         self.last_completion: Any | None = None
+        self.last_streamed_text = False
 
         base_chat = getattr(base_client, "chat", None)
         base_completions = getattr(base_chat, "completions", None) if base_chat is not None else None
@@ -108,12 +119,92 @@ class _DecisionClientProxy:
             self._outer = outer
 
         def create(self, **kwargs: Any) -> Any:
-            # ReasoningEngine builds its own prompt messages; runtime must keep tool-role messages in play,
-            # so we override the outgoing request with the runtime-managed message list.
+            # ReasoningEngine 会倾向于自己重建 prompt，但 runtime 必须保留前面轮次的
+            # tool observation，所以这里统一改用 runtime 自己维护的 messages。
             kwargs["messages"] = list(self._outer._get_messages())
-            result = self._outer._base.chat.completions.create(**kwargs)
+            self._outer.last_streamed_text = False
+            if self._outer._stream:
+                kwargs["stream"] = True
+                result = self._outer._consume_streaming_completion(**kwargs)
+            else:
+                result = self._outer._base.chat.completions.create(**kwargs)
             self._outer.last_completion = result
             return result
+
+    def _consume_streaming_completion(self, **kwargs: Any) -> Any:
+        stream = self._base.chat.completions.create(**kwargs)
+        try:
+            iterator = iter(stream)
+        except TypeError:
+            return stream
+        content_parts: list[str] = []
+        tool_calls: dict[int, dict[str, Any]] = {}
+        finish_reason: Any = None
+        model_name = kwargs.get("model")
+
+        for event in iterator:
+            if model_name is None:
+                model_name = _read_stream_attr(event, "model")
+            choices = _read_stream_attr(event, "choices") or []
+            if not choices:
+                continue
+            choice = choices[0]
+            delta = _read_stream_attr(choice, "delta")
+            finish_reason = _read_stream_attr(choice, "finish_reason") or finish_reason
+
+            text = _read_stream_attr(delta, "content")
+            if isinstance(text, str) and text:
+                content_parts.append(text)
+                if self._emit_text_delta is not None and _should_emit_text_delta(text):
+                    self._emit_text_delta(text)
+                    self.last_streamed_text = True
+
+            for raw_tool_call in list(_read_stream_attr(delta, "tool_calls") or []):
+                index = _coerce_tool_call_index(raw_tool_call)
+                existing = tool_calls.setdefault(
+                    index,
+                    {
+                        "id": "",
+                        "type": "function",
+                        "function": {"name": "", "arguments": ""},
+                    },
+                )
+
+                call_id = _read_stream_attr(raw_tool_call, "id")
+                if isinstance(call_id, str) and call_id:
+                    existing["id"] = call_id
+                call_type = _read_stream_attr(raw_tool_call, "type")
+                if isinstance(call_type, str) and call_type:
+                    existing["type"] = call_type
+
+                function_payload = _read_stream_attr(raw_tool_call, "function")
+                function_name = _read_stream_attr(function_payload, "name")
+                if isinstance(function_name, str) and function_name:
+                    existing["function"]["name"] += function_name
+                function_arguments = _read_stream_attr(function_payload, "arguments")
+                if isinstance(function_arguments, str) and function_arguments:
+                    existing["function"]["arguments"] += function_arguments
+
+        tool_call_objects = [
+            SimpleNamespace(
+                id=item["id"] or None,
+                type=item["type"] or "function",
+                function=SimpleNamespace(
+                    name=item["function"]["name"] or None,
+                    arguments=item["function"]["arguments"] or "",
+                ),
+            )
+            for _, item in sorted(tool_calls.items(), key=lambda entry: entry[0])
+        ]
+        message = SimpleNamespace(
+            role="assistant",
+            content="".join(content_parts) or None,
+            tool_calls=tool_call_objects,
+        )
+        return SimpleNamespace(
+            model=model_name,
+            choices=[SimpleNamespace(message=message, finish_reason=finish_reason)],
+        )
 
 
 class LangGraphAgentRuntime:
@@ -161,6 +252,7 @@ class LangGraphAgentRuntime:
         session_id = session_state.session_id
         query = session_state.goal
 
+        # 初始化本轮执行所需上下文：历史消息、工具 schema、以及 runtime 自己维护的消息列表。
         history_messages = self._load_history(session_state)
         tool_schemas = self._build_tool_schemas()
         messages: list[dict[str, Any]] = self.reasoning_engine.prompt_builder.build_messages(
@@ -169,7 +261,14 @@ class LangGraphAgentRuntime:
             memory_summary=None,
         )
         decision_tools = tool_schemas if self._should_send_tools() else None
-        proxy_client = _DecisionClientProxy(base_client=self.client, get_messages=lambda: messages)
+        proxy_client = _DecisionClientProxy(
+            base_client=self.client,
+            get_messages=lambda: messages,
+            stream=stream,
+            emit_text_delta=(lambda chunk: self.emit_event("assistant_delta", {"delta": chunk}))
+            if stream and self.emit_event is not None
+            else None,
+        )
         decision_engine = ReasoningEngine(
             client=proxy_client,
             prompt_builder=self.reasoning_engine.prompt_builder,
@@ -193,6 +292,7 @@ class LangGraphAgentRuntime:
             if stream and self.emit_event is not None:
                 self.emit_event("assistant_debug", payload)
 
+        # ReAct 主循环：模型决策、执行工具、回灌 observation、检查是否终止。
         for _ in range(self.max_turns):
             step = self.state_manager.start_step(session_state)
             try:
@@ -210,6 +310,7 @@ class LangGraphAgentRuntime:
             completion_message = self._extract_first_message(completion) if completion is not None else None
             content = _extract_content_text(self._read_attr(completion_message, "content"))
 
+            # 连决策都失败时，直接返回统一失败响应。
             if decision is None or decision.decision_type == DecisionType.decision_error:
                 session_state.final_response = {
                     "message": "普通对话生成失败，请稍后再试。",
@@ -236,10 +337,16 @@ class LangGraphAgentRuntime:
                     )
                 )
 
+            # 模型已经确认可以直接回复用户，不再进入工具调用链。
             if decision.decision_type == DecisionType.final_answer:
                 final_answer = decision.final_answer or ""
-                response_streamed = False
-                if stream and self.emit_event is not None and final_answer and "Final Answer:" not in content:
+                response_streamed = proxy_client.last_streamed_text
+                if (
+                    stream
+                    and self.emit_event is not None
+                    and final_answer
+                    and not response_streamed
+                ):
                     self._emit_text_deltas(final_answer)
                     response_streamed = True
 
@@ -278,8 +385,8 @@ class LangGraphAgentRuntime:
                 return session_state
 
             if decision.decision_type == DecisionType.tool_arguments_error:
-                # The model attempted tool calling but produced invalid arguments; feed a synthetic tool error
-                # back and allow one self-correction.
+                # 模型决定调工具，但 tool arguments 格式不合法。
+                # 这里会伪造一条 tool error observation 回灌给模型，允许自纠一次。
                 if retry_used:
                     session_state.final_response = {
                         "message": "工具调用失败，请稍后再试。",
@@ -395,11 +502,12 @@ class LangGraphAgentRuntime:
                 )
                 has_tool_error = True
                 has_non_retryable_error = False
-                # Continue loop to let the model self-correct once.
+                # 当前 step 收尾后继续下一轮，让模型看到错误并自行修正。
                 self.state_manager.finalize_step(session_state, step)
                 retry_used = True
                 continue
 
+            # 其余非预期 decision 类型不继续兜底处理，统一按失败返回。
             if decision.decision_type != DecisionType.tool_call:
                 session_state.final_response = {
                     "message": "普通对话生成失败，请稍后再试。",
@@ -418,7 +526,8 @@ class LangGraphAgentRuntime:
                 )
                 return session_state
 
-            # tool-calling branch (model tool_calls)
+            # tool_call 分支中，先把 assistant 的 tool_calls 写回消息列表，
+            # 再逐个执行工具，并把 observation 作为 role=tool 的消息追加回去。
             tool_calls_payload: list[dict[str, Any]] = []
             for idx, tool_call in enumerate(decision.tool_calls, start=1):
                 call_id = tool_call.call_id or f"call-{step.step_index}-{idx}"
@@ -446,7 +555,7 @@ class LangGraphAgentRuntime:
                     cache_key = self._build_tool_cache_key(tool_name, tool_args)
                 reused_cached_result = False
 
-                # Record activity into session state, so termination policies reflect real tool work.
+                # 先把动作记入 session_state，termination policy 依赖这些统计判断是否空转或重复。
                 self.state_manager.record_tool_call(
                     session_state,
                     tool_name=tool_name,
@@ -482,6 +591,7 @@ class LangGraphAgentRuntime:
                     if not guardrail.allowed:
                         argument_error = guardrail.detail or "Tool call blocked by guardrails."
 
+                # guardrail 或参数检查失败时，不真正调用 dispatcher，而是回灌统一错误结果。
                 if argument_error:
                     result = {
                         "ok": False,
@@ -510,6 +620,7 @@ class LangGraphAgentRuntime:
                         result = dispatcher_result.to_legacy_dict()
 
                         if result.get("ok"):
+                            # 同一会话里完全相同的只读工具结果可以复用，减少重复调用。
                             if cache_key:
                                 tool_result_cache[cache_key] = result
                             if tool_name == "search_knowledge_base":
@@ -547,7 +658,7 @@ class LangGraphAgentRuntime:
                     status="success" if bool(result.get("ok")) else "error",
                 )
 
-                # Legacy compatibility: allow the model to self-correct once on validation errors.
+                # 兼容旧逻辑：参数错误允许模型基于 observation 自纠一次。
                 if not result.get("ok"):
                     error_payload = result.get("error") or {}
                     if error_payload.get("code") == "INVALID_ARGUMENT":
@@ -592,12 +703,13 @@ class LangGraphAgentRuntime:
                     metadata={"ok": bool(result.get("ok"))},
                 )
                 try:
+                    # memory 只作为辅助能力，失败不能影响 runtime 主流程。
                     self.memory_manager.record_observation(
                         session_state,
                         observation_record=session_state.observations[-1],
                     )
                 except Exception as exc:
-                    # Memory updates must not break the runtime loop, but should be observable.
+                    # memory 失败只记录调试日志，不中断当前问答。
                     logger.debug("Memory manager failed to record observation", exc_info=exc)
 
                 if not result.get("ok"):
@@ -608,6 +720,7 @@ class LangGraphAgentRuntime:
             self.state_manager.finalize_step(session_state, step)
 
             if has_tool_error:
+                # 非可重试错误，或已经消耗过一次自纠机会时，结束本轮运行。
                 if has_non_retryable_error or retry_used:
                     session_state.final_response = {
                         "message": "工具调用失败，请稍后再试。",
@@ -627,6 +740,7 @@ class LangGraphAgentRuntime:
                     return session_state
                 retry_used = True
 
+            # 停止策略统一收口在 termination controller，避免停止条件分散在主循环里。
             termination = self.termination.evaluate(session_state)
             if termination.should_stop and session_state.final_response is None:
                 session_state.final_response = {
@@ -685,9 +799,9 @@ class LangGraphAgentRuntime:
             return []
 
     def _should_send_tools(self) -> bool:
-        # For compatibility with existing tests/behavior:
-        # - When only work_service is configured (no upload_service), run in legacy ReAct mode.
-        # - Otherwise prefer tool calling mode to surface tool schemas for the model.
+        # 兼容历史行为：
+        # 只有 work_service 时保留旧式文本 ReAct；
+        # 其他情况下优先把工具 schema 暴露给模型，走标准 tool-calling。
         work_service = getattr(self.tool_dispatcher, "work_service", None)
         upload_service = getattr(self.tool_dispatcher, "upload_service", None)
         return not (work_service is not None and upload_service is None)
@@ -763,3 +877,32 @@ class LangGraphAgentRuntime:
         from app.ai.agent.reasoning.models import ToolCall
 
         return ToolCall(tool_name=tool_name, tool_args=tool_args)
+
+
+def _read_stream_attr(payload: Any, name: str) -> Any:
+    if payload is None:
+        return None
+    if isinstance(payload, Mapping):
+        return payload.get(name)
+    return getattr(payload, name, None)
+
+
+def _should_emit_text_delta(text: str) -> bool:
+    normalized = text.strip()
+    if not normalized:
+        return False
+    if "Thought:" in normalized:
+        return False
+    if "Action:" in normalized:
+        return False
+    if "Final Answer:" in normalized:
+        return False
+    return True
+
+
+def _coerce_tool_call_index(raw_tool_call: Any) -> int:
+    raw_index = _read_stream_attr(raw_tool_call, "index")
+    try:
+        return int(raw_index)
+    except (TypeError, ValueError):
+        return 0

@@ -6,6 +6,8 @@ from typing import Any
 
 
 class DecisionType(str, Enum):
+    """定义 reasoning 层可能产出的几类决策结果。"""
+
     final_answer = "final_answer"
     tool_call = "tool_call"
     tool_arguments_error = "tool_arguments_error"
@@ -14,6 +16,8 @@ class DecisionType(str, Enum):
 
 @dataclass(frozen=True)
 class ToolCall:
+    """表示一次标准化后的工具调用请求。"""
+
     tool_name: str
     tool_args: dict[str, Any]
     call_id: str | None = None
@@ -21,6 +25,8 @@ class ToolCall:
 
 @dataclass
 class AgentDecision:
+    """表示模型经过解析后的统一决策结果，供 runtime 继续执行。"""
+
     decision_type: DecisionType
     thought: str | None = None
     final_answer: str | None = None

@@ -16,6 +16,7 @@ from app.ai.agent.state.manager import AgentStateManager
 from app.ai.agent.termination.controller import TerminationController
 from app.ai.agent.tools.dispatcher import ToolDispatcher
 from app.ai.agent.tracing.tracer import NoopAgentTracer, SqlAlchemyAgentTracer
+from app.ai.services.mcp_llm_proxy_client import McpLlmProxyClient
 from app.schemas.ai import (
     AssistantActionButton,
     AssistantArtifact,
@@ -36,30 +37,37 @@ class AgentFacade:
         *,
         settings: Any,
         conversation_service: Any,
+        tenant_id: str | None = None,
         rag_service: Any | None = None,
         upload_service: Any | None = None,
         work_service: Any | None = None,
         flow_chart_interrupt_service: Any | None = None,
         openai_client: Any | None = None,
         openai_client_factory: Callable[[], Any] | None = None,
+        mcp_client: Any | None = None,
     ) -> None:
         self.settings = settings
         self.conversation_service = conversation_service
+        self.tenant_id = tenant_id
         self.rag_service = rag_service
         self.upload_service = upload_service
         self.work_service = work_service
         self.flow_chart_interrupt_service = flow_chart_interrupt_service
         self._openai_client = openai_client
         self._openai_client_factory = openai_client_factory
+        self._mcp_client = mcp_client
 
         self.state_manager = AgentStateManager()
         self.prompt_builder = PromptBuilder(max_history=4)
         self._reasoning_engine: ReasoningEngine | None = None
         self.tool_dispatcher = ToolDispatcher(
+            settings=self.settings,
             work_service=self.work_service,
             upload_service=self.upload_service,
             ai_rag_service=self.rag_service,
             current_user_id=None,
+            current_tenant_id=self.tenant_id,
+            mcp_client=self._mcp_client,
         )
         self.guardrails = GuardrailsPolicy()
         self.termination = TerminationController()
@@ -144,7 +152,7 @@ class AgentFacade:
         query: str,
         history_messages: list[ConversationMessageResponse],
         user_id: str,
-        stream: bool = False,
+        stream: bool = True,
         max_turns: int = 6,
         emit_event: Callable[[str, dict[str, Any]], None] | None = None,
         runtime_backend: str | None = None,
@@ -171,6 +179,7 @@ class AgentFacade:
             conversation_id=conversation_id or "",
             user_id=user_id,
             history_messages=history_messages,
+            stream=stream,
             max_turns=max_turns,
             emit_event=emit_event,
         )
@@ -192,21 +201,45 @@ class AgentFacade:
         conversation_id: str,
         user_id: str,
         history_messages: list[ConversationMessageResponse],
+        stream: bool,
         max_turns: int,
         emit_event: Callable[[str, dict[str, Any]], None] | None,
     ) -> Any:
+        reasoning_client = McpLlmProxyClient(
+            endpoint=getattr(self.settings, "assistant_mcp_llm_gateway_url"),
+            user_id=user_id,
+            tenant_id=self.tenant_id,
+            session_id=conversation_id,
+            timeout_seconds=float(
+                getattr(
+                    self.settings,
+                    "assistant_mcp_llm_timeout_seconds",
+                    getattr(self.settings, "assistant_mcp_request_timeout_seconds", 20.0),
+                )
+            ),
+            http_client=self._mcp_client,
+        )
         return LangGraphAgentRuntime(
             settings=self.settings,
-            client=self._get_openai_client(),
+            client=reasoning_client,
             conversation_service=None,
             history_messages=history_messages,
             tool_dispatcher=ToolDispatcher(
+                settings=self.settings,
                 work_service=self.work_service,
                 upload_service=self.upload_service,
                 ai_rag_service=self.rag_service,
                 current_user_id=user_id,
+                current_tenant_id=self.tenant_id,
+                current_session_id=conversation_id,
+                mcp_client=self._mcp_client,
             ),
-            reasoning_engine=self._get_reasoning_engine(),
+            reasoning_engine=ReasoningEngine(
+                client=reasoning_client,
+                prompt_builder=self.prompt_builder,
+                model=getattr(self.settings, "assistant_llm_model", ""),
+                temperature=0.2,
+            ),
             state_manager=self.state_manager,
             memory_manager=self.memory,
             guardrails=self.guardrails,
